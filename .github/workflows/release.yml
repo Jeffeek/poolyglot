@@ -64,6 +64,11 @@ jobs:
           packages-dir: python/dist
           repository-url: https://test.pypi.org/legacy/
 
+      # Each publish signs dist/ in place, leaving *.publish.attestation behind;
+      # clear them so the PyPI step generates its own instead of erroring on dupes.
+      - name: Clear TestPyPI attestations
+        run: rm -f dist/*.publish.attestation
+
       # --- publish ---
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
