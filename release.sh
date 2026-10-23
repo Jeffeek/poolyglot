@@ -6,7 +6,7 @@
 #   ./release.sh 2.1.0      # -> branch release/2.1.x, tag v2.1.0
 #
 # Language-agnostic: this script only edits the one root VERSION file. Each language's
-# build reads the version from the git tag in CI, so nothing here is Python-specific.
+# build reads the version from the git tag in CI
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -52,9 +52,13 @@ echo "remote:   $(git remote get-url origin 2>/dev/null || echo '<no origin>')"
 echo
 confirm "commit, tag and push the above?" || die "aborted — VERSION staged but nothing pushed."
 
-# 6. commit, tag the release commit, push branch + tag.
-git commit -m "release: ${TAG}"
-git tag "$TAG"
+# 6. commit (only if the version changed), tag, push branch + tag.
+if git diff --cached --quiet; then
+    echo "VERSION already ${VERSION}; tagging the current commit without a new bump."
+else
+    git commit -m "release: ${TAG}"
+fi
+git tag -a "$TAG" -m "release ${TAG}"    # -a -m => annotated with a message, never opens an editor
 git push origin "$BRANCH"
 git push origin "$TAG"
 
