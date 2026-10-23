@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=77"]          # >=77 for the SPDX `license` string form (PEP 639)
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "connpool"
+version = "1.0.0"
+description = "Generic connection pool for Python (sync + asyncio), standard library only"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Mikhail Ilyushin" }]
+keywords = ["connection pool", "pool", "asyncio", "database", "resource", "circuit breaker"]
+dependencies = []                      # runtime: standard library only
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+
+# [project.urls]
+Homepage = "https://github.com/Jeffeek/poolyglot/python"
+Repository = "https://github.com/Jeffeek/poolyglot"
+Issues = "https://github.com/Jeffeek/poolyglot/issues"
+
+[project.optional-dependencies]
+# Dev tooling only - the library itself stays dependency-free.
+#   pip install -e ".[dev]"
+dev = [
+    "coverage>=7",                     # used by run_tests.sh
+    "pytest>=8",                       # optional: `pytest` also works (see [tool.pytest.ini_options])
+    "mypy>=1.8",                       # static type checking (the package ships py.typed)
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+connpool = ["py.typed"]
+
+[tool.pytest.ini_options]              # optional: `pytest` also works if you prefer it
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+# The library targets 100% line coverage; CI fails below it.
+fail_under = 100
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]

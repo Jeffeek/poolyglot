@@ -1,0 +1,17 @@
+# Build / editor / tooling cruft (dragged in through the python/ junction too)
+**/__pycache__/
+**/*.py[cod]
+**/.mypy_cache/
+**/.pytest_cache/
+**/.coverage
+**/.coverage.*
+**/htmlcov/
+**/dist/
+**/build/
+**/*.egg-info/
+**/.idea/
+**/.vscode/
+
+# The python package carries its own inert .github/ (standalone-repo leftover);
+# only this repo's root .github/ is live.
+python/.github/
