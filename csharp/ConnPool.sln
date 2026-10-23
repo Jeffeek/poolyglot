@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{609C8104-C9BB-43EF-9719-9F9B75066D55}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConnPool", "src\ConnPool\ConnPool.csproj", "{64ECAD2C-8F46-46B0-8E13-42F18E9157B4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{31F83DF8-7AD7-4972-B3AB-BE71EFD7E599}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConnPool.Tests", "tests\ConnPool.Tests\ConnPool.Tests.csproj", "{AB2B4CBC-D5A4-4AFD-8593-62C9AE9B1B63}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{64ECAD2C-8F46-46B0-8E13-42F18E9157B4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{64ECAD2C-8F46-46B0-8E13-42F18E9157B4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{64ECAD2C-8F46-46B0-8E13-42F18E9157B4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{64ECAD2C-8F46-46B0-8E13-42F18E9157B4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB2B4CBC-D5A4-4AFD-8593-62C9AE9B1B63}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB2B4CBC-D5A4-4AFD-8593-62C9AE9B1B63}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB2B4CBC-D5A4-4AFD-8593-62C9AE9B1B63}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB2B4CBC-D5A4-4AFD-8593-62C9AE9B1B63}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{64ECAD2C-8F46-46B0-8E13-42F18E9157B4} = {609C8104-C9BB-43EF-9719-9F9B75066D55}
+		{AB2B4CBC-D5A4-4AFD-8593-62C9AE9B1B63} = {31F83DF8-7AD7-4972-B3AB-BE71EFD7E599}
+	EndGlobalSection
+EndGlobal

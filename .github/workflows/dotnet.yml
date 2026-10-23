@@ -1,0 +1,30 @@
+name: dotnet
+
+on:
+  push:
+    paths: ["csharp/**", ".github/workflows/dotnet.yml"]
+  pull_request:
+    paths: ["csharp/**", ".github/workflows/dotnet.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: csharp
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Build (library, netstandard2.1)
+        run: dotnet build src/ConnPool/ConnPool.csproj -c Release
+      - name: Tests + coverage gate (100% line)
+        run: bash run_tests.sh
