@@ -1,9 +1,11 @@
 name: release
 
 # Fires when release.sh pushes a v<version> tag. One job per language:
-# build -> test -> verify -> publish. The version comes from the tag, checked
-# against the root VERSION file. To add a language, copy the python job, swap
-# the working-directory and the build/test/publish steps for that toolchain.
+# build -> test -> verify -> publish, then a final github-release job attaches every
+# language's built artifacts to the GitHub Release. The version comes from the tag,
+# checked against the root VERSION file. To add a language, copy the python job, swap
+# the working-directory and the build/test/publish steps for that toolchain, and add its
+# dist to the github-release job via actions/upload-artifact.
 on:
   push:
     tags: ["v*"]
@@ -74,3 +76,122 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: python/dist
+
+      # Hand the built distributions to the github-release job (not the signing attestations).
+      - name: Upload artifacts for the GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: |
+            python/dist/*.whl
+            python/dist/*.tar.gz
+
+  # C# / .NET: build -> test -> pack -> verify -> publish to NuGet (with a GitHub Packages dry run).
+  # This is the template for any other language: swap working-directory and the toolchain steps.
+  dotnet:
+    runs-on: ubuntu-latest
+    environment:
+      name: nuget
+      url: https://www.nuget.org/packages/ConnPool
+    permissions:
+      contents: read
+      packages: write          # for the GitHub Packages dry run
+      id-token: write          # for NuGet trusted publishing (OIDC token exchange)
+    defaults:
+      run:
+        working-directory: csharp
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # The tag is the source of truth; it must agree with the committed VERSION.
+      - name: Check tag matches VERSION
+        working-directory: .
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="$(cat VERSION)"
+          [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # --- build + test ---
+      - name: Build (library, netstandard2.1)
+        run: dotnet build src/ConnPool/ConnPool.csproj -c Release -p:Version="${VERSION}"
+      - name: Tests + coverage gate (100% line)
+        run: ./run_tests.sh
+
+      # --- pack (inject the release version from the tag) ---
+      - name: Pack (nupkg + snupkg)
+        run: dotnet pack src/ConnPool/ConnPool.csproj -c Release -p:Version="${VERSION}" -o dist
+
+      # --- verify ---
+      - name: Verify artifacts
+        run: |
+          ls -l dist
+          ls dist | grep -q "ConnPool.${VERSION}.nupkg" || { echo "built package is not version ${VERSION}"; exit 1; }
+
+      # --- publish to GitHub Packages (populates the repo's Packages tab; also a pre-flight
+      #     check that the package pushes cleanly before the real nuget.org publish) ---
+      - name: Publish to GitHub Packages
+        run: >
+          dotnet nuget push "dist/*.nupkg"
+          --source "https://nuget.pkg.github.com/${GITHUB_REPOSITORY_OWNER}/index.json"
+          --api-key "${{ secrets.GITHUB_TOKEN }}"
+          --skip-duplicate
+
+      # --- publish: trusted publishing (OIDC) - no long-lived API key stored ---
+      # Exchange the GitHub OIDC token for a short-lived nuget.org key, done right before
+      # the push (the key is valid ~1h). Requires a trusted-publishing policy on nuget.org
+      - name: NuGet login (OIDC -> short-lived API key)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}   # nuget.org profile name that owns the policy
+
+      - name: Publish to NuGet
+        run: >
+          dotnet nuget push "dist/*.nupkg"
+          --source "https://api.nuget.org/v3/index.json"
+          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
+          --skip-duplicate
+
+      # Hand the packages (and symbols) to the github-release job.
+      - name: Upload artifacts for the GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-dist
+          path: |
+            csharp/dist/*.nupkg
+            csharp/dist/*.snupkg
+
+  # Attach every language's built artifacts to the GitHub Release for this tag, so users get
+  # verifiable binaries.
+  # Runs only after both publishes succeed; creates the release if it does not exist yet.
+  github-release:
+    needs: [python, dotnet]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts        # -> artifacts/python-dist/*, artifacts/dotnet-dist/*
+
+      - name: Create or update the GitHub Release with artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mapfile -t FILES < <(find artifacts -type f | sort)
+          echo "attaching ${#FILES[@]} file(s):"; printf '  %s\n' "${FILES[@]}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${FILES[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" --generate-notes
+          fi

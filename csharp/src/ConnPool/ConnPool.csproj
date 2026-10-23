@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.1: usable from .NET Core 3.0+, .NET 5+, and Mono/Xamarin/Unity. -->
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CS1591: don't require XML docs on every public member (code is the doc here). -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- NuGet package metadata (Version is overwritten from the git tag in CI). -->
+    <PackageId>ConnPool</PackageId>
+    <Version>1.0.0</Version>
+    <Description>Generic connection pool for .NET (sync + async), dependency-free (netstandard2.1). Pools anything a small factory can create, validate, reset and close: DB drivers, HTTP clients, SSH sessions, sockets.</Description>
+    <Authors>Mikhail Ilyushin</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>connection-pool;pool;async;database;resource;circuit-breaker</PackageTags>
+    <RepositoryUrl>https://github.com/Jeffeek/poolyglot</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/Jeffeek/poolyglot/tree/main/csharp</PackageProjectUrl>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ConnPool.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\" Condition="Exists('..\..\..\LICENSE')" />
+  </ItemGroup>
+
+</Project>

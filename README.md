@@ -10,9 +10,9 @@ close: DB drivers, HTTP sessions, SSH clients, sockets.
 ## Languages
 
 | Language | Status | Directory | Package |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Python (sync + asyncio) | ✅ stable | [`python/`](python/) | `connpool` |
-| C# / .NET | 🚧 planned | `csharp/` | — |
+| C# / .NET (sync + async) | ✅ stable | [`csharp/`](csharp/) | `ConnPool` |
 | Java | 🚧 planned | `java/` | — |
 | Go | 🚧 planned | `go/` | — |
 | Rust | 🚧 planned | `rust/` | — |
