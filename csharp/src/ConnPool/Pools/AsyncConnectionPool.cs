@@ -481,15 +481,22 @@ namespace ConnPool
             return (pooled, now - started);
         }
 
-        private double? CreateLimit(double? deadline)
+        // The create cancellation limit (seconds), plus whether the acquire *deadline* is the
+        // binding constraint. The flag lets the caller tell "deadline reached" (PoolTimeoutError)
+        // from "create timed out" (a fault) without re-reading the clock after the fact: the
+        // CancellationTokenSource timer and the monotonic clock are independent, so a boundary
+        // re-read of the remaining time can misclassify a genuine deadline timeout.
+        private (double? Limit, bool DeadlineBinding) CreateLimit(double? deadline)
         {
-            var limits = new List<double>();
-            if (_cfg.CreateTimeout != null)
-                limits.Add(_cfg.CreateTimeout.Value);
             var rem = TimeoutMath.Remaining(deadline, _clock.Monotonic());
+            var createTimeout = _cfg.CreateTimeout;
+            var deadlineBinding = rem != null && (createTimeout == null || rem.Value <= createTimeout.Value);
+            var limits = new List<double>();
+            if (createTimeout != null)
+                limits.Add(createTimeout.Value);
             if (rem != null)
                 limits.Add(rem.Value);
-            return limits.Count == 0 ? (double?)null : Math.Max(0.0, limits.Min());
+            return (limits.Count == 0 ? (double?)null : Math.Max(0.0, limits.Min()), deadlineBinding);
         }
 
         private async Task RegisterNewAsync(PooledConnection<T> pooled, double createdIn, CancellationToken cancellationToken)
@@ -557,9 +564,9 @@ namespace ConnPool
                 if (_closed)
                     throw new PoolClosedError($"pool '{Name}' is closed");
                 attempt += 1;
+                var (limit, deadlineBinding) = CreateLimit(deadline);
                 try
                 {
-                    var limit = CreateLimit(deadline);
                     using var timeoutCts =
                         limit is null ? null : new CancellationTokenSource(TimeSpan.FromSeconds(limit.Value));
                     using var linked = timeoutCts is null
@@ -573,7 +580,11 @@ namespace ConnPool
                     cancellationToken.ThrowIfCancellationRequested();
                     var left = TimeoutMath.Remaining(deadline, _clock.Monotonic());
                     var wasTimeout = exc is OperationCanceledException;
-                    if (wasTimeout && left != null && left <= 0)
+                    // A timeout whose binding limit was the acquire deadline is the deadline being
+                    // reached, not a backend fault - surface it as PoolTimeoutError (breaker records
+                    // an abort, not a failure). Decided by which limit bound this attempt, not by a
+                    // clock re-read, so it can't flake on CTS-timer vs monotonic-clock skew.
+                    if (wasTimeout && deadlineBinding)
                         throw new PoolTimeoutError(
                             $"pool '{Name}': acquire deadline reached while creating connection");
                     _events.Dispatch(l => l.OnCreateFailed(exc));
