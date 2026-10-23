@@ -122,7 +122,7 @@ jobs:
       - name: Build (library, netstandard2.1)
         run: dotnet build src/ConnPool/ConnPool.csproj -c Release -p:Version="${VERSION}"
       - name: Tests + coverage gate (100% line)
-        run: ./run_tests.sh
+        run: bash run_tests.sh
 
       # --- pack (inject the release version from the tag) ---
       - name: Pack (nupkg + snupkg)

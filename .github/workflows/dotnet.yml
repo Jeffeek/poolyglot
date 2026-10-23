@@ -27,4 +27,4 @@ jobs:
       - name: Build (library, netstandard2.1)
         run: dotnet build src/ConnPool/ConnPool.csproj -c Release
       - name: Tests + coverage gate (100% line)
-        run: ./run_tests.sh
+        run: bash run_tests.sh
