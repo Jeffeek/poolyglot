@@ -63,8 +63,11 @@ jobs:
         with:
           packages-dir: python/dist
           repository-url: https://test.pypi.org/legacy/
-          attestations: false   # don't write *.publish.attestation into dist/ —
-                                # it would block the real PyPI step's own attestations
+
+      # Each publish signs dist/ in place, leaving *.publish.attestation behind;
+      # clear them so the PyPI step generates its own instead of erroring on dupes.
+      - name: Clear TestPyPI attestations
+        run: rm -f dist/*.publish.attestation
 
       # --- publish ---
       - name: Publish to PyPI
