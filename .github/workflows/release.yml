@@ -1,0 +1,71 @@
+name: release
+
+# Fires when release.sh pushes a v<version> tag. One job per language:
+# build -> test -> verify -> publish. The version comes from the tag, checked
+# against the root VERSION file. To add a language, copy the python job, swap
+# the working-directory and the build/test/publish steps for that toolchain.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/connpool
+    permissions:
+      id-token: write
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The tag is the source of truth; it must agree with the committed VERSION.
+      - name: Check tag matches VERSION
+        working-directory: .
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="$(cat VERSION)"
+          [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Install (dev + build tools)
+        run: pip install -e ".[dev]" build twine
+
+      # --- test ---
+      - name: Tests + coverage gate (fail_under=100 in pyproject)
+        run: |
+          coverage run -m unittest discover -s tests -t .
+          coverage report
+      - name: Type check
+        run: mypy
+
+      # --- build (inject the release version from the tag) ---
+      - name: Build sdist + wheel
+        run: |
+          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
+          python -m build
+
+      # --- verify ---
+      - name: Verify artifacts
+        run: |
+          twine check dist/*
+          ls dist/ | grep -q "connpool-${VERSION}-" || { echo "built wheel is not version ${VERSION}"; exit 1; }
+
+      # --- dry run: publish to TestPyPI first
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist
+          repository-url: https://test.pypi.org/legacy/
+
+      # --- publish ---
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist
