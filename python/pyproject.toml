@@ -27,7 +27,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# [project.urls]
+[project.urls]
 Homepage = "https://github.com/Jeffeek/poolyglot/python"
 Repository = "https://github.com/Jeffeek/poolyglot"
 Issues = "https://github.com/Jeffeek/poolyglot/issues"

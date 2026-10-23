@@ -15,3 +15,4 @@
 # The python package carries its own inert .github/ (standalone-repo leftover);
 # only this repo's root .github/ is live.
 python/.github/
+CLAUDE.md
