@@ -1,16 +1,16 @@
 # connpool
 
-![connpool](../docs/assets/package_icon.svg)
+![connpool](https://raw.githubusercontent.com/Jeffeek/poolyglot/main/docs/assets/package_icon.png)
 
 **Connection pooling for Python — sync & asyncio, standard library only.**
 
-The Python member of [poolyglot](../README.md) · *Pool once. Speak everywhere.*
+The Python member of [poolyglot](https://github.com/Jeffeek/poolyglot#readme) · *Pool once. Speak everywhere.*
 
 [![Python CI](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml)
 [![PyPI](https://img.shields.io/pypi/v/connpool?logo=pypi&logoColor=white)](https://pypi.org/project/connpool/)
 [![coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=python&logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=python)
 [![python versions](https://img.shields.io/pypi/pyversions/connpool?logo=python&logoColor=white)](https://pypi.org/project/connpool/)
-[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE)
 
 ---
 
@@ -49,28 +49,8 @@ Dependency direction is strictly downward (a layer only imports from layers list
 facade re-exporting the public API, so `from connpool import ConnectionPool` keeps working even if internal
 modules move.
 
-```mermaid
-flowchart TB
-    Pools["<b>pools</b><br/>ConnectionPool · AsyncConnectionPool · registry"]
-    FO["<b>factories</b> &amp; <b>observability</b><br/>ConnectionFactory · PoolListener · stats"]
-    Policy["<b>policy</b><br/>PoolConfig · lifecycle rules"]
-    Resilience["<b>resilience</b><br/>CircuitBreaker · RetryPolicy"]
-    Core["<b>core</b><br/>errors · clocks · PooledConnection · timeouts"]
-
-    Pools --> FO --> Policy --> Resilience --> Core
-```
-
-The circuit breaker guards connection *creation* — once creations keep failing it trips **open** and
-fails fast, then probes to recover:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Closed
-    Closed --> Open: failure_threshold failed creations
-    Open --> HalfOpen: after recovery_timeout
-    HalfOpen --> Closed: success_threshold probe(s) pass
-    HalfOpen --> Open: probe fails
-```
+📐 See the [**architecture diagrams**](https://github.com/Jeffeek/poolyglot/blob/main/docs/architecture.md)
+— layering, connection lifecycle, and circuit-breaker states (shared across all poolyglot languages).
 
 ## What you get
 
