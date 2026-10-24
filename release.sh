@@ -24,6 +24,7 @@ TAG="v${VERSION}"
 # Per-language manifests that carry the version (keep in sync with CI's verify steps).
 PYPROJECT="python/pyproject.toml"
 CSPROJ="csharp/src/ConnPool/ConnPool.csproj"
+POM="java/pom.xml"
 
 # 1. clean working tree (nothing modified, staged, or untracked).
 [[ -z "$(git status --porcelain)" ]] || die "working tree not clean — commit or stash first."
@@ -47,13 +48,15 @@ fi
 echo "$VERSION" > VERSION
 sed -i -E "s/^version = \".*\"/version = \"${VERSION}\"/" "$PYPROJECT"
 sed -i -E "s|<Version>[^<]*</Version>|<Version>${VERSION}</Version>|" "$CSPROJ"
+sed -i -E "0,/<version>[^<]*<\/version>/s||<version>${VERSION}</version>|" "$POM"
 
 # Guard against a manifest whose line didn't match the expected pattern (silent no-op).
 grep -q "^version = \"${VERSION}\"" "$PYPROJECT" || die "failed to set version in ${PYPROJECT}"
 grep -q "<Version>${VERSION}</Version>" "$CSPROJ" || die "failed to set version in ${CSPROJ}"
+grep -q "<version>${VERSION}</version>" "$POM" || die "failed to set version in ${POM}"
 
 # 5. show what's about to happen and confirm before anything leaves this machine.
-git add VERSION "$PYPROJECT" "$CSPROJ"
+git add VERSION "$PYPROJECT" "$CSPROJ" "$POM"
 git status
 echo
 echo "release:  ${VERSION}"

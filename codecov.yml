@@ -21,6 +21,10 @@ flags:
     paths:
       - csharp/
     carryforward: true
+  java:
+    paths:
+      - java/
+    carryforward: true
 
 comment:
   layout: "condensed_header, flags, files"

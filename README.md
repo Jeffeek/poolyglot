@@ -8,6 +8,7 @@ API-parallel, so switching stacks is a syntax change, not a rewrite.
 
 [![Python CI](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml)
 [![.NET CI](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml)
+[![Java CI](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml)
 [![codecov](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot)
 [![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE)
 
@@ -33,7 +34,7 @@ except what the factory tells it.
 | --- | --- | :---: | --- | --- | --- |
 | **Python** | sync + `asyncio` | ✅ stable | [![PyPI](https://img.shields.io/pypi/v/connpool?logo=pypi&logoColor=white&label=connpool)](https://pypi.org/project/connpool/) | [![python coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=python&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=python) | [`python/`](https://github.com/Jeffeek/poolyglot/tree/main/python) |
 | **C# / .NET** | sync + `async` | ✅ stable | [![NuGet](https://img.shields.io/nuget/v/ConnPool?logo=nuget&logoColor=white&label=ConnPool)](https://www.nuget.org/packages/ConnPool/) | [![csharp coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=csharp&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=csharp) | [`csharp/`](https://github.com/Jeffeek/poolyglot/tree/main/csharp) |
-| Java | — | 🚧 planned | — | — | `java/` |
+| **Java** | blocking + async | ✅ stable | [![Maven Central](https://img.shields.io/maven-central/v/io.github.jeffeek/connpool?logo=apachemaven&logoColor=white&label=connpool)](https://central.sonatype.com/artifact/io.github.jeffeek/connpool) | [![java coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=java&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=java) | [`java/`](https://github.com/Jeffeek/poolyglot/tree/main/java) |
 | Go | — | 🚧 planned | — | — | `go/` |
 | Rust | — | 🚧 planned | — | — | `rust/` |
 | TypeScript (Node) | — | 🚧 planned | — | — | `typescript/` |
