@@ -1,16 +1,16 @@
 # ConnPool
 
-[![ConnPool](../docs/assets/package_icon.svg)](../docs/assets/package_icon.svg)
+[![ConnPool](https://raw.githubusercontent.com/Jeffeek/poolyglot/main/docs/assets/package_icon.png)](https://github.com/Jeffeek/poolyglot#readme)
 
 **Connection pooling for .NET — sync &amp; async, dependency-free.**
 
-The C# member of [**poolyglot**](../README.md) · *Pool once. Speak everywhere.*
+The C# member of [**poolyglot**](https://github.com/Jeffeek/poolyglot#readme) · *Pool once. Speak everywhere.*
 
 [![.NET CI](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml)
 [![NuGet](https://img.shields.io/nuget/v/ConnPool?logo=nuget&logoColor=white)](https://www.nuget.org/packages/ConnPool/)
 [![coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=csharp&logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=csharp)
 [![netstandard2.1](https://img.shields.io/badge/netstandard-2.1-512BD4?logo=dotnet&logoColor=white)](#install)
-[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE)
 
 ---
 
@@ -32,7 +32,7 @@ using (pool)                                  // optional: Open() for warm-up + 
 }
 ```
 
-This is the C# member of [**poolyglot**](../README.md): one pooling model, implemented per language,
+This is the C# member of [**poolyglot**](https://github.com/Jeffeek/poolyglot#readme): one pooling model, implemented per language,
 kept API-parallel. Field names, event names, defaults, and `CloseReason`/`BreakerState` wire values
 are identical to the Python (`connpool`) implementation — switching languages is a syntax change,
 not a model change.
@@ -63,28 +63,8 @@ Dependency direction is strictly downward (a layer only uses layers listed above
 `Core → Resilience → Policy → Factories/Observability → Pools`. Everything lives in the single
 `ConnPool` namespace, so one `using ConnPool;` imports the whole public API.
 
-```mermaid
-flowchart TB
-    Pools["<b>Pools</b><br/>ConnectionPool · AsyncConnectionPool · Registry"]
-    FO["<b>Factories</b> &amp; <b>Observability</b><br/>ConnectionFactory&lt;T&gt; · PoolListener · PoolStats"]
-    Policy["<b>Policy</b><br/>PoolConfig · Lifecycle rules"]
-    Resilience["<b>Resilience</b><br/>CircuitBreaker · RetryPolicy"]
-    Core["<b>Core</b><br/>errors · clocks · PooledConnection · Timeout"]
-
-    Pools --> FO --> Policy --> Resilience --> Core
-```
-
-The circuit breaker guards connection *creation* — once creations keep failing it trips **open** and
-fails fast, then probes to recover:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Closed
-    Closed --> Open: FailureThreshold failed creations
-    Open --> HalfOpen: after RecoveryTimeout
-    HalfOpen --> Closed: SuccessThreshold probe(s) pass
-    HalfOpen --> Open: probe fails
-```
+📐 See the [**architecture diagrams**](https://github.com/Jeffeek/poolyglot/blob/main/docs/architecture.md)
+— layering, connection lifecycle, and circuit-breaker states (shared across all poolyglot languages).
 
 ## What you get
 
@@ -193,4 +173,4 @@ dotnet run --project examples                        # runnable SQLite demo
 
 ## License
 
-MIT — see [LICENSE](../LICENSE).
+MIT — see [LICENSE](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE).

@@ -12,7 +12,7 @@
 
     <!-- NuGet package metadata (Version is bumped by release.sh and verified against the tag in CI). -->
     <PackageId>ConnPool</PackageId>
-    <Version>1.0.4</Version>
+    <Version>1.0.7</Version>
     <Description>Generic connection pool for .NET (sync + async), dependency-free (netstandard2.1). Pools anything a small factory can create, validate, reset and close: DB drivers, HTTP clients, SSH sessions, sockets.</Description>
     <Authors>Jeffeek</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -26,7 +26,7 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
-    <PackageIcon>icon.png</PackageIcon>
+    <PackageIcon>package_icon.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -35,7 +35,7 @@
 
   <ItemGroup>
     <None Include="..\..\..\docs\assets\package_icon.png" Pack="true" PackagePath="\" />
-    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\..\LICENSE" Pack="true" PackagePath="\" Condition="Exists('..\..\..\LICENSE')" />
   </ItemGroup>
 
