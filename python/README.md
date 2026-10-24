@@ -1,5 +1,19 @@
 # connpool
 
+![connpool](../docs/assets/package_icon.svg)
+
+**Connection pooling for Python — sync & asyncio, standard library only.**
+
+The Python member of [poolyglot](../README.md) · *Pool once. Speak everywhere.*
+
+[![Python CI](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml)
+[![PyPI](https://img.shields.io/pypi/v/connpool?logo=pypi&logoColor=white)](https://pypi.org/project/connpool/)
+[![coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=python&logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=python)
+[![python versions](https://img.shields.io/pypi/pyversions/connpool?logo=python&logoColor=white)](https://pypi.org/project/connpool/)
+[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+
+---
+
 A generic connection pool for Python 3.11+ — sync (threads) and `asyncio`. **Standard library only**
 (no third-party runtime dependencies). It pools *anything*: DB drivers, HTTP sessions, SSH clients, sockets…
 because the pool knows nothing about connections except what a small `ConnectionFactory` tells it.
@@ -15,7 +29,7 @@ with pool:                                  # optional: warm-up + background swe
 
 ## Project layout
 
-```
+```text
 src/connpool/                 the library (imports: standard library only)
   core/            errors, clocks, PooledConnection/CloseReason, timeout helpers
   resilience/      breaker.py (circuit breaker), retry.py (backoff policy)
@@ -35,10 +49,33 @@ Dependency direction is strictly downward (a layer only imports from layers list
 facade re-exporting the public API, so `from connpool import ConnectionPool` keeps working even if internal
 modules move.
 
+```mermaid
+flowchart TB
+    Pools["<b>pools</b><br/>ConnectionPool · AsyncConnectionPool · registry"]
+    FO["<b>factories</b> &amp; <b>observability</b><br/>ConnectionFactory · PoolListener · stats"]
+    Policy["<b>policy</b><br/>PoolConfig · lifecycle rules"]
+    Resilience["<b>resilience</b><br/>CircuitBreaker · RetryPolicy"]
+    Core["<b>core</b><br/>errors · clocks · PooledConnection · timeouts"]
+
+    Pools --> FO --> Policy --> Resilience --> Core
+```
+
+The circuit breaker guards connection *creation* — once creations keep failing it trips **open** and
+fails fast, then probes to recover:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Closed
+    Closed --> Open: failure_threshold failed creations
+    Open --> HalfOpen: after recovery_timeout
+    HalfOpen --> Closed: success_threshold probe(s) pass
+    HalfOpen --> Open: probe fails
+```
+
 ## What you get
 
 | Concern | How it works |
-|---|---|
+| --- | --- |
 | Sizing | `min_size` kept warm, `max_size` is a *hard* cap (slot reserved before create) |
 | Timeouts | `acquire_timeout` (per-call override), `create_timeout` (async), retries never sleep past the deadline |
 | Rotation | `max_lifetime` (with jitter), `max_uses`, `max_idle_time`, `LIFO`/`FIFO` reuse |
@@ -62,13 +99,14 @@ class MyFactory(ConnectionFactory[MyConn]):
     def close(self, c):          c.close()                          # default: calls c.close()
     def is_fatal_error(self, e): return isinstance(e, ConnectionError)
 ```
+
 Async: subclass `AsyncConnectionFactory`, or pass sync/async callables to `AsyncConnectionPool.from_callables`.
 `examples/database/dbapi_factory.py` shows one factory that covers every PEP 249 database driver.
 
 ## Configuration (`PoolConfig`)
 
 | Field | Default | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `min_size` / `max_size` | 0 / 10 | warm connections / hard cap |
 | `acquire_timeout` | 30 | seconds to wait (`None` = forever, `0` = don't wait) |
 | `max_waiters` | None | backpressure: cap callers blocked in `acquire()` (excess → `PoolExhaustedError`; `None` = unlimited, `0` = never wait when full) |
@@ -86,7 +124,7 @@ Async: subclass `AsyncConnectionFactory`, or pass sync/async callables to `Async
 
 ## Install, test, run examples
 
-```
+```cmd
 pip install -e .                                  # or: export PYTHONPATH=src
 pip install -e ".[dev]"                           # + coverage/pytest/mypy
 python -m unittest discover -s tests -t .         # 142 tests, ~2s
@@ -94,6 +132,7 @@ python -m unittest discover -s tests -t .         # 142 tests, ~2s
 mypy                                               # strict type check (config in pyproject.toml)
 python examples/database/sqlite_demo.py
 ```
+
 (`pytest` works too if installed; configuration is in `pyproject.toml`.)
 Examples importing `paramiko` or `psycopg` need those packages; the library never does.
 
@@ -118,7 +157,7 @@ library covers the real need; adding them would make the pool heavier for every 
 a minority. Listed here so the trade-off is explicit and the upgrade path is known.
 
 | Feature | How it would be implemented | Why not (and what covers it today) |
-|---|---|---|
+| --- | --- | --- |
 | **Runtime resize** | Make `max_size`/`min_size` mutable behind the lock; on grow, raise the cap and `notify_all` waiters; on shrink, mark excess idle connections for disposal and let in-use ones close on release (never force-closed). | Erodes the immutable-`PoolConfig` invariant (predictability is a feature); shrink is fiddly. Use a fresh pool or a `PoolRegistry` keyed by profile — and `min_size`↔`max_size` already flexes with load. |
 | **Adaptive sizing** | A control loop that tunes `max_size` from live metrics (saturation, acquire latency), with hysteresis to avoid oscillation. | Genuinely hard to do well and easy to make worse than static. `min_size` + `max_size` + idle eviction is already a simple, deterministic adaptive scheme (grow to max under load, shrink to min when quiet). |
 | **Priority acquisition** | Replace the single `Condition` with a priority heap of per-waiter futures; `release()` hands the connection to the highest-priority waiter; timeouts/cancellation remove waiters from the heap. | Ordering ≠ isolation, and it complicates the hot path. Prefer **separate pools** (a `PoolRegistry` acts as bulkheads): give batch its own small pool and interactive its own. |

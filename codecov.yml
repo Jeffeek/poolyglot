@@ -1,0 +1,27 @@
+# Codecov config for the polyglot monorepo. Each language uploads under its own flag so
+# coverage is tracked per-implementation. CI is path-scoped (python.yml runs only on
+# python/** changes, dotnet.yml on csharp/**), so carryforward keeps a flag's last known
+# coverage when the other language is the one that changed.
+coverage:
+  status:
+    project:
+      default:
+        target: 100%
+        threshold: 0%
+    patch:
+      default:
+        target: 100%
+
+flags:
+  python:
+    paths:
+      - python/
+    carryforward: true
+  csharp:
+    paths:
+      - csharp/
+    carryforward: true
+
+comment:
+  layout: "condensed_header, flags, files"
+  require_changes: true

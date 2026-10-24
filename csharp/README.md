@@ -1,5 +1,19 @@
 # ConnPool
 
+[![ConnPool](../docs/assets/package_icon.svg)](../docs/assets/package_icon.svg)
+
+**Connection pooling for .NET — sync &amp; async, dependency-free.**
+
+The C# member of [**poolyglot**](../README.md) · *Pool once. Speak everywhere.*
+
+[![.NET CI](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml)
+[![NuGet](https://img.shields.io/nuget/v/ConnPool?logo=nuget&logoColor=white)](https://www.nuget.org/packages/ConnPool/)
+[![coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=csharp&logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=csharp)
+[![netstandard2.1](https://img.shields.io/badge/netstandard-2.1-512BD4?logo=dotnet&logoColor=white)](#install)
+[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+
+---
+
 A generic connection pool for .NET — synchronous (threads) and `async`/`await`. **Dependency-free**
 (`netstandard2.1`, standard library only). It pools *anything*: DB drivers, HTTP clients, SSH
 sessions, sockets… because the pool knows nothing about connections except what a small
@@ -48,6 +62,29 @@ examples/                     client code - NOT part of the package
 Dependency direction is strictly downward (a layer only uses layers listed above it):
 `Core → Resilience → Policy → Factories/Observability → Pools`. Everything lives in the single
 `ConnPool` namespace, so one `using ConnPool;` imports the whole public API.
+
+```mermaid
+flowchart TB
+    Pools["<b>Pools</b><br/>ConnectionPool · AsyncConnectionPool · Registry"]
+    FO["<b>Factories</b> &amp; <b>Observability</b><br/>ConnectionFactory&lt;T&gt; · PoolListener · PoolStats"]
+    Policy["<b>Policy</b><br/>PoolConfig · Lifecycle rules"]
+    Resilience["<b>Resilience</b><br/>CircuitBreaker · RetryPolicy"]
+    Core["<b>Core</b><br/>errors · clocks · PooledConnection · Timeout"]
+
+    Pools --> FO --> Policy --> Resilience --> Core
+```
+
+The circuit breaker guards connection *creation* — once creations keep failing it trips **open** and
+fails fast, then probes to recover:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Closed
+    Closed --> Open: FailureThreshold failed creations
+    Open --> HalfOpen: after RecoveryTimeout
+    HalfOpen --> Closed: SuccessThreshold probe(s) pass
+    HalfOpen --> Open: probe fails
+```
 
 ## What you get
 
@@ -133,8 +170,9 @@ wait that long (`0` = don't wait).
 
 ``` cmd
 dotnet build src/ConnPool/ConnPool.csproj          # the library (netstandard2.1)
-dotnet test                                         # 166 tests
-./run_tests.sh                                       # tests under coverage (gate: 100% line)
+dotnet test                                         # 181 tests (net8.0 + net10.0)
+./run_tests.sh                                       # tests under coverage (gate: 100% line + branch)
+./run_tests.sh -m                                    # ...also list any uncovered lines / branches
 dotnet run --project examples                        # runnable SQLite demo
 ```
 
