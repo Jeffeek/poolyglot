@@ -47,11 +47,13 @@ jobs:
       - name: Type check
         run: mypy
 
-      # --- build (inject the release version from the tag) ---
-      - name: Build sdist + wheel
+      # --- verify the committed version matches the tag (release.sh sets it), then build ---
+      - name: Check pyproject version matches tag
         run: |
-          sed -i "s/^version = .*/version = \"${VERSION}\"/" pyproject.toml
-          python -m build
+          PV="$(sed -nE 's/^version = "(.*)"/\1/p' pyproject.toml | head -1)"
+          [ "$PV" = "$VERSION" ] || { echo "pyproject version ${PV} != tag ${VERSION} (run release.sh)"; exit 1; }
+      - name: Build sdist + wheel
+        run: python -m build
 
       # --- verify ---
       - name: Verify artifacts
@@ -118,15 +120,21 @@ jobs:
           [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
+      # --- verify the committed version matches the tag (release.sh sets it) ---
+      - name: Check ConnPool.csproj version matches tag
+        run: |
+          CV="$(grep -oE '<Version>[^<]+</Version>' src/ConnPool/ConnPool.csproj | sed -E 's|</?Version>||g')"
+          [ "$CV" = "$VERSION" ] || { echo "csproj version ${CV} != tag ${VERSION} (run release.sh)"; exit 1; }
+
       # --- build + test ---
       - name: Build (library, netstandard2.1)
-        run: dotnet build src/ConnPool/ConnPool.csproj -c Release -p:Version="${VERSION}"
+        run: dotnet build src/ConnPool/ConnPool.csproj -c Release
       - name: Tests + coverage gate (100% line)
         run: bash run_tests.sh
 
-      # --- pack (inject the release version from the tag) ---
+      # --- pack (version comes from the verified csproj) ---
       - name: Pack (nupkg + snupkg)
-        run: dotnet pack src/ConnPool/ConnPool.csproj -c Release -p:Version="${VERSION}" -o dist
+        run: dotnet pack src/ConnPool/ConnPool.csproj -c Release -o dist
 
       # --- verify ---
       - name: Verify artifacts

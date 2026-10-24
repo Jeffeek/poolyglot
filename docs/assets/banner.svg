@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="768" viewBox="0 0 1536 768" fill="none">
+    <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1536" y2="768" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#F4FCFB"/>
+            <stop offset=".52" stop-color="#FCFEFE"/>
+            <stop offset="1" stop-color="#F6FBFF"/>
+        </linearGradient>
+        <radialGradient id="wash" cx="0" cy="0" r="1" gradientTransform="matrix(570 0 0 420 340 390)" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#D9F7F1" stop-opacity=".72"/>
+            <stop offset="1" stop-color="#E8F8F8" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="markGrad" x1="282" y1="219" x2="474" y2="526" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#28C7B4"/>
+            <stop offset=".54" stop-color="#13B8C5"/>
+            <stop offset="1" stop-color="#2A94D4"/>
+        </linearGradient>
+        <linearGradient id="lineGrad" x1="315" y1="280" x2="448" y2="482" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#E9FFFC"/>
+            <stop offset="1" stop-color="#F2FFFF"/>
+        </linearGradient>
+        <filter id="soft" x="180" y="150" width="400" height="470" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+            <feGaussianBlur stdDeviation="24"/>
+        </filter>
+    </defs>
+
+    <rect width="1536" height="768" fill="url(#bg)"/>
+    <rect width="1536" height="768" fill="url(#wash)"/>
+
+    <g stroke="#73BFC3" stroke-width="1.5" opacity=".12">
+        <path d="M0 168 104 218l106-56 95 50 104-76"/>
+        <path d="m0 168 45 119 164-125 65 172"/>
+        <path d="m104 218 37 177 133-61 71 107 64-305"/>
+        <path d="M1536 136 1434 196l-88-82-101 113-108-44"/>
+        <path d="m1536 136-50 153-140-62-101 113-108-157"/>
+        <path d="m1434 196-20 172-108-28-61 171-108-171"/>
+        <path d="M0 598 120 543l98 94 100-70 92 96"/>
+        <path d="m1536 586-109-57-93 99-97-78-100 105"/>
+        <path d="m1346 114 38-61m-38 61 58 62M209 162l-15-75m15 75 96 50"/>
+    </g>
+    <g fill="#80C9C8" opacity=".2">
+        <circle cx="104" cy="218" r="4"/><circle cx="210" cy="162" r="4"/><circle cx="305" cy="212" r="4"/>
+        <circle cx="141" cy="395" r="4"/><circle cx="274" cy="334" r="4"/><circle cx="345" cy="441" r="4"/>
+        <circle cx="409" cy="136" r="4"/><circle cx="1434" cy="196" r="4"/><circle cx="1346" cy="114" r="4"/>
+        <circle cx="1245" cy="227" r="4"/><circle cx="1137" cy="183" r="4"/><circle cx="1486" cy="289" r="4"/>
+        <circle cx="1346" cy="367" r="4"/><circle cx="1238" cy="339" r="4"/><circle cx="1177" cy="510" r="4"/>
+        <circle cx="120" cy="543" r="4"/><circle cx="218" cy="637" r="4"/><circle cx="318" cy="567" r="4"/>
+        <circle cx="1427" cy="529" r="4"/><circle cx="1334" cy="628" r="4"/><circle cx="1237" cy="550" r="4"/>
+    </g>
+
+    <ellipse cx="383" cy="385" rx="154" ry="173" fill="#56CFC0" opacity=".10" filter="url(#soft)"/>
+    <g>
+        <path d="M383 218c-12 0-22 8-29 17-31 39-111 137-111 203 0 79 62 143 140 143s140-64 140-143c0-66-80-164-111-203-7-9-17-17-29-17Z" fill="url(#markGrad)"/>
+        <path d="M383 253c-27 36-95 122-95 183 0 54 42 99 95 99s95-45 95-99c0-61-68-147-95-183Z" stroke="url(#lineGrad)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity=".93"/>
+        <g stroke="#E9FFFC" stroke-width="4" stroke-linecap="round" opacity=".95">
+            <path d="m337 335 47 38 43-28-10 62-66 30 33 48"/>
+            <path d="m337 335 14 102m76-130-43 66 33 34"/>
+        </g>
+        <g fill="#F4FFFF">
+            <circle cx="337" cy="335" r="8"/>
+            <circle cx="384" cy="373" r="9"/>
+            <circle cx="427" cy="345" r="8"/>
+            <circle cx="417" cy="407" r="8"/>
+            <circle cx="351" cy="437" r="8"/>
+            <circle cx="384" cy="485" r="8"/>
+        </g>
+        <circle cx="337" cy="335" r="3" fill="#159EB7"/>
+        <circle cx="384" cy="373" r="3" fill="#159EB7"/>
+        <circle cx="427" cy="345" r="3" fill="#159EB7"/>
+        <circle cx="417" cy="407" r="3" fill="#159EB7"/>
+        <circle cx="351" cy="437" r="3" fill="#453CCB"/>
+        <circle cx="384" cy="485" r="3" fill="#159EB7"/>
+    </g>
+
+    <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif">
+        <text x="585" y="379" fill="#153743" font-size="76" font-weight="650" letter-spacing="-4">poolyglot</text>
+        <text x="592" y="430" fill="#6D858B" font-size="22" font-weight="450" letter-spacing=".3">Pool once. Speak everywhere.</text>
+    </g>
+</svg>

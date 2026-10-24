@@ -28,3 +28,14 @@ jobs:
         run: dotnet build src/ConnPool/ConnPool.csproj -c Release
       - name: Tests + coverage gate (100% line)
         run: bash run_tests.sh
+
+      # run_tests.sh writes cobertura per target framework; flag=csharp keeps it separate
+      # from the Python flag on Codecov.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: csharp/tests/ConnPool.Tests/coverage
+          flags: csharp
+          name: csharp
+          fail_ci_if_error: false

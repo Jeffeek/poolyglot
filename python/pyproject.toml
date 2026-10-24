@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "connpool"
-version = "1.0.0"
+version = "1.0.4"
 description = "Generic connection pool for Python (sync + asyncio), standard library only"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Mikhail Ilyushin" }]
+authors = [{ name = "Jeffeek" }]
 keywords = ["connection pool", "pool", "asyncio", "database", "resource", "circuit breaker"]
 dependencies = []                      # runtime: standard library only
 classifiers = [
@@ -28,7 +28,7 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Jeffeek/poolyglot/python"
+Homepage = "https://github.com/Jeffeek/poolyglot/tree/main/python"
 Repository = "https://github.com/Jeffeek/poolyglot"
 Issues = "https://github.com/Jeffeek/poolyglot/issues"
 

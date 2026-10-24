@@ -5,8 +5,9 @@
 #
 #   ./release.sh 2.1.0      # -> branch release/2.1.x, tag v2.1.0
 #
-# Language-agnostic: this script only edits the one root VERSION file. Each language's
-# build reads the version from the git tag in CI
+# This bumps the root VERSION *and* each language's package manifest (so the committed
+# sources always carry the release version); CI re-verifies they match the tag before
+# building and publishing.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -19,6 +20,10 @@ VERSION="${1:-}"
 IFS='.' read -r MAJOR MINOR _PATCH <<< "$VERSION"
 BRANCH="release/${MAJOR}.${MINOR}.x"
 TAG="v${VERSION}"
+
+# Per-language manifests that carry the version (keep in sync with CI's verify steps).
+PYPROJECT="python/pyproject.toml"
+CSPROJ="csharp/src/ConnPool/ConnPool.csproj"
 
 # 1. clean working tree (nothing modified, staged, or untracked).
 [[ -z "$(git status --porcelain)" ]] || die "working tree not clean — commit or stash first."
@@ -38,11 +43,17 @@ if [[ "$current" != "$BRANCH" ]]; then
     fi
 fi
 
-# 4. bump the version.
+# 4. bump the version in the root file and every language manifest.
 echo "$VERSION" > VERSION
+sed -i -E "s/^version = \".*\"/version = \"${VERSION}\"/" "$PYPROJECT"
+sed -i -E "s|<Version>[^<]*</Version>|<Version>${VERSION}</Version>|" "$CSPROJ"
+
+# Guard against a manifest whose line didn't match the expected pattern (silent no-op).
+grep -q "^version = \"${VERSION}\"" "$PYPROJECT" || die "failed to set version in ${PYPROJECT}"
+grep -q "<Version>${VERSION}</Version>" "$CSPROJ" || die "failed to set version in ${CSPROJ}"
 
 # 5. show what's about to happen and confirm before anything leaves this machine.
-git add VERSION
+git add VERSION "$PYPROJECT" "$CSPROJ"
 git status
 echo
 echo "release:  ${VERSION}"
