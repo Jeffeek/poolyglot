@@ -81,7 +81,7 @@ jobs:
 
       # Hand the built distributions to the github-release job (not the signing attestations).
       - name: Upload artifacts for the GitHub Release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-dist
           path: |
@@ -169,7 +169,7 @@ jobs:
 
       # Hand the packages (and symbols) to the github-release job.
       - name: Upload artifacts for the GitHub Release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dotnet-dist
           path: |
@@ -266,7 +266,7 @@ jobs:
 
       # Hand the built jars to the github-release job.
       - name: Upload artifacts for the GitHub Release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: java-dist
           path: |
@@ -323,7 +323,7 @@ jobs:
           git archive --format=tar.gz --prefix="connpool-go-${VERSION}/" -o "connpool-go-${VERSION}.tar.gz" HEAD:go
 
       - name: Upload artifacts for the GitHub Release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: go-dist
           path: connpool-go-${{ env.VERSION }}.tar.gz
@@ -399,7 +399,7 @@ jobs:
 
       # Hand the packed tarball to the github-release job.
       - name: Upload artifacts for the GitHub Release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: typescript-dist
           path: typescript/jeffeek-connpool-${{ env.VERSION }}.tgz
@@ -476,7 +476,7 @@ jobs:
 
       # Hand the packaged crate to the github-release job.
       - name: Upload artifacts for the GitHub Release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-dist
           path: rust/target/package/connpool-rs-${{ env.VERSION }}.crate
