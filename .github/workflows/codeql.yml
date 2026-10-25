@@ -8,27 +8,42 @@ on:
   schedule:
     - cron: "30 2 * * 1" # weekly, Mondays 02:30 UTC
 
+# Don't pile up redundant scans: a newer push to the same ref cancels in-flight runs.
+# (Scheduled runs are never cancelled — they key off the unique run id.)
+concurrency:
+  group: codeql-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      security-events: write # upload results to the Security tab
+      actions: read # required by CodeQL to read workflow run metadata
     strategy:
       fail-fast: false
       matrix:
         include:
           - language: python
             build-mode: none
+          - language: javascript-typescript # CodeQL's identifier for the JS/TS family
+            build-mode: none
           - language: csharp
             build-mode: manual
           - language: java-kotlin # CodeQL's identifier for the JVM family
             build-mode: manual
+          - language: go
+            build-mode: manual
     steps:
       - uses: actions/checkout@v4
 
+      # --- per-language toolchain (only the compiled languages need one to build) ---
       - name: Set up .NET
         if: matrix.language == 'csharp'
         uses: actions/setup-dotnet@v4
@@ -45,12 +60,30 @@ jobs:
           java-version: "17"
           cache: maven
 
+      - name: Set up Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable # CodeQL just needs a working toolchain; go.mod pins the language level
+
+      # --- CodeQL: deeper security suite + skip tests/examples/build output noise ---
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+          # paths-ignore only applies to the interpreted extractors (python, javascript-typescript);
+          # the compiled languages analyze whatever their build compiles.
+          config: |
+            paths-ignore:
+              - '**/test/**'
+              - '**/tests/**'
+              - '**/examples/**'
+              - '**/dist/**'
+              - '**/*.test.ts'
 
+      # --- manual builds for the compiled languages (build-mode: manual) ---
       - name: Build (csharp)
         if: matrix.language == 'csharp'
         run: dotnet build src/ConnPool/ConnPool.csproj -c Release
@@ -60,6 +93,11 @@ jobs:
         if: matrix.language == 'java-kotlin'
         run: mvn -q -B -DskipTests package
         working-directory: java
+
+      - name: Build (go)
+        if: matrix.language == 'go'
+        run: go build ./...
+        working-directory: go
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3

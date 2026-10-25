@@ -29,6 +29,10 @@ flags:
     paths:
       - go/
     carryforward: true
+  typescript:
+    paths:
+      - typescript/
+    carryforward: true
 
 comment:
   layout: "condensed_header, flags, files"

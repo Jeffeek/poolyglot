@@ -325,11 +325,87 @@ jobs:
           name: go-dist
           path: connpool-go-${{ env.VERSION }}.tar.gz
 
+  # TypeScript / npm: build -> test -> pack -> verify -> publish to npm via trusted publishing (OIDC),
+  # with a `npm publish --dry-run` pre-flight. Cloned from the dotnet job. npm trusted publishing needs
+  # npm >= 11.5.1 and `id-token: write`; no stored npm token.
+  typescript:
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@jeffeek/connpool
+    permissions:
+      contents: read
+      id-token: write          # for npm trusted publishing (OIDC)
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      # The tag is the source of truth; it must agree with the committed VERSION.
+      - name: Check tag matches VERSION
+        working-directory: .
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="$(cat VERSION)"
+          [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # --- verify the committed version matches the tag (release.sh sets it) ---
+      - name: Check package.json version matches tag
+        run: |
+          PV="$(node -p "require('./package.json').version")"
+          [ "$PV" = "$VERSION" ] || { echo "package.json version ${PV} != tag ${VERSION} (run release.sh)"; exit 1; }
+
+      # npm trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 ships an older npm.
+      - name: Upgrade npm (OIDC-capable)
+        run: npm install -g npm@latest
+
+      # --- install + build + test ---
+      - name: Install dependencies
+        run: npm install
+      - name: Build (library, ESM + types)
+        run: npm run build
+      - name: Type check
+        run: npm run typecheck
+      - name: Tests + coverage gate (100% line + branch)
+        run: bash run_tests.sh
+
+      # --- pack (version comes from the verified package.json) ---
+      - name: Pack (tarball)
+        run: npm pack
+
+      # --- verify ---
+      - name: Verify artifact
+        run: |
+          ls -l
+          test -f "jeffeek-connpool-${VERSION}.tgz" || { echo "built tarball is not version ${VERSION}"; exit 1; }
+
+      # --- dry run: pack + validate the publishing without uploading ---
+      - name: Publish dry run
+        run: npm publish --dry-run --provenance --access public
+
+      # --- publish: trusted publishing (OIDC) - no stored npm token ---
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+
+      # Hand the packed tarball to the github-release job.
+      - name: Upload artifacts for the GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: typescript-dist
+          path: typescript/jeffeek-connpool-${{ env.VERSION }}.tgz
+
   # Attach every language's built artifacts to the GitHub Release for this tag, so users get
   # verifiable binaries.
   # Runs only after all publishes succeed; creates the release if it does not exist yet.
   github-release:
-    needs: [python, dotnet, java, go]
+    needs: [python, dotnet, java, go, typescript]
     runs-on: ubuntu-latest
     permissions:
       contents: write
