@@ -490,16 +490,31 @@ export class AsyncConnectionPool<T extends object> {
     return [pooled, now - started];
   }
 
-  private createLimit(deadline: number | null): number | null {
-    const limits: number[] = [];
-    if (this.cfg.createTimeout !== null) {
-      limits.push(this.cfg.createTimeout);
-    }
+  /**
+   * The time budget for a single `factory.create()`, and whether the **acquire deadline** (not
+   * `createTimeout`) is the binding limit. `deadlineBound` is decided here, up front, rather than by
+   * re-reading the clock after the timer fires: the timer (libuv) and the clock
+   * (`performance.now`) are different time sources, so a post-hoc `remaining <= 0` comparison is
+   * racy exactly at the boundary where the two limits coincide. Python avoids this because
+   * `asyncio.timeout` and the injected clock share one monotonic clock.
+   */
+  private createLimit(deadline: number | null): { limit: number | null; deadlineBound: boolean } {
+    const createTimeout = this.cfg.createTimeout;
     const rem = remaining(deadline, this.clock.monotonic());
-    if (rem !== null) {
-      limits.push(rem);
+    // The acquire deadline binds iff it exists and is no later than createTimeout (ties -> deadline,
+    // matching the Python `left <= 0` outcome when the two limits are equal).
+    const deadlineBound = rem !== null && (createTimeout === null || rem <= createTimeout);
+    let limit: number | null;
+    if (createTimeout === null && rem === null) {
+      limit = null;
+    } else if (createTimeout === null) {
+      limit = Math.max(0, rem!);
+    } else if (rem === null) {
+      limit = createTimeout;
+    } else {
+      limit = Math.max(0, Math.min(createTimeout, rem));
     }
-    return limits.length ? Math.max(0, Math.min(...limits)) : null;
+    return { limit, deadlineBound };
   }
 
   private async registerNew(
@@ -573,8 +588,9 @@ export class AsyncConnectionPool<T extends object> {
         throw new PoolClosedError(`pool '${this.name}' is closed`);
       }
       attempt += 1;
+      const { limit, deadlineBound } = this.createLimit(deadline);
       try {
-        return await this.callCreateWithLimit(deadline, signal);
+        return await this.callCreateWithLimit(limit, signal);
       } catch (exc) {
         if (signal?.aborted) {
           throw exc; // cancellation: don't retry, don't count as a create failure
@@ -582,8 +598,7 @@ export class AsyncConnectionPool<T extends object> {
         // A timeout whose binding limit was the acquire deadline is caller impatience, not a
         // backend fault: surface PoolTimeoutError so the breaker records an abort. A
         // createTimeout firing is a backend fault and flows through the create-failure path.
-        const left = remaining(deadline, this.clock.monotonic());
-        if (exc instanceof CreateLimitTimeout && left !== null && left <= 0) {
+        if (exc instanceof CreateLimitTimeout && deadlineBound) {
           throw new PoolTimeoutError(
             `pool '${this.name}': acquire deadline reached while creating connection`,
           );
@@ -596,6 +611,7 @@ export class AsyncConnectionPool<T extends object> {
           );
         }
         const delay = retry.delayFor(attempt, this.rng);
+        const left = remaining(deadline, this.clock.monotonic());
         if (left !== null && delay >= left) {
           throw new PoolTimeoutError(
             `pool '${this.name}': acquire deadline reached while retrying creation`,
@@ -607,10 +623,9 @@ export class AsyncConnectionPool<T extends object> {
   }
 
   private callCreateWithLimit(
-    deadline: number | null,
+    limit: number | null,
     signal: AbortSignal | undefined,
   ): Promise<T> {
-    const limit = this.createLimit(deadline);
     const work = Promise.resolve(this.factory.create());
     if (signal?.aborted) {
       work.catch(() => {});
