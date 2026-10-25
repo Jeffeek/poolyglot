@@ -357,6 +357,17 @@ namespace ConnPool.Tests.Pools
         }
 
         [Fact]
+        public async Task ExplicitRngIsAccepted()
+        {
+            // A caller may inject its own Random (for deterministic jitter); it is used instead of a fresh one.
+            var pool = new AsyncConnectionPool<FakeConn>(new AsyncFakeFactory(), rng: new Random(123));
+            _pools.Add(pool);
+            FakeConn c = await pool.AcquireAsync();
+            await pool.ReleaseAsync(c);
+            Assert.Equal(1, pool.Stats().Size);
+        }
+
+        [Fact]
         public async Task HealthCheckClosedMidValidationReportsPoolClosed()
         {
             AsyncConnectionPool<FakeConn> pool = null!;

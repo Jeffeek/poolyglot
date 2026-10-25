@@ -162,6 +162,17 @@ namespace ConnPool.Tests.Pools
         }
 
         [Fact]
+        public void ExplicitRngIsAccepted()
+        {
+            // A caller may inject its own Random (for deterministic jitter); it is used instead of a fresh one.
+            var pool = new ConnectionPool<FakeConn>(new FakeFactory(), rng: new Random(123));
+            _pools.Add(pool);
+            FakeConn c = pool.Acquire();
+            pool.Release(c);
+            Assert.Equal(1, pool.Stats().Size);
+        }
+
+        [Fact]
         public void HealthCheckClosedMidValidationReportsPoolClosed()
         {
             // A connection that is still healthy but whose pool closes *during* the idle

@@ -30,7 +30,14 @@ args=(
   -p:ThresholdStat=total
 )
 
-dotnet test "${args[@]}"
+# When listing misses, keep going past a threshold failure so the report still prints
+# (a failed gate is exactly when the uncovered lines matter); remember the status to exit on.
+rc=0
+if $show_missing; then
+  dotnet test "${args[@]}" || rc=$?
+else
+  dotnet test "${args[@]}"
+fi
 
 if $show_missing; then
   echo
@@ -64,4 +71,5 @@ for path in sorted(k for k in miss if k):
 if clean:
     print("  none - 100% line & branch")
 PY
+  exit $rc
 fi
