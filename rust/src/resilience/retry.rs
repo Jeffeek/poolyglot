@@ -85,7 +85,9 @@ impl RetryPolicy {
             ));
         }
         if self.jitter < 0.0 || self.jitter > 1.0 {
-            return Err(PoolError::Config("retry.jitter must be within [0, 1]".into()));
+            return Err(PoolError::Config(
+                "retry.jitter must be within [0, 1]".into(),
+            ));
         }
         Ok(())
     }

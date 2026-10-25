@@ -182,7 +182,9 @@ where
     ) -> Result<Self, PoolError> {
         config.validate()?;
         let options = options.unwrap_or_default();
-        let clock: Arc<dyn Clock> = options.clock.unwrap_or_else(|| Arc::new(SystemClock::new()));
+        let clock: Arc<dyn Clock> = options
+            .clock
+            .unwrap_or_else(|| Arc::new(SystemClock::new()));
         let rng: Box<dyn Rng> = options.rng.unwrap_or_else(|| Box::new(SystemRng::new()));
         let name = options.name.unwrap_or_else(|| "pool".to_string());
 
@@ -237,7 +239,10 @@ where
         let want_thread = {
             let mut g = self.0.state.lock().unwrap();
             if g.closed {
-                return Err(PoolError::Closed(format!("pool {:?} is closed", self.0.name)));
+                return Err(PoolError::Closed(format!(
+                    "pool {:?} is closed",
+                    self.0.name
+                )));
             }
             if g.opened {
                 return Ok(());
@@ -531,7 +536,9 @@ where
         };
         let now = self.clock.monotonic();
         let hold = pooled.hold_time(now);
-        let reason = self.check_release(&pooled, &conn, discard, error, now).await;
+        let reason = self
+            .check_release(&pooled, &conn, discard, error, now)
+            .await;
         self.events.safe(|l| l.on_released(&pooled, hold));
         match reason {
             Some(r) => self.destroy_detached(pooled, r).await,
@@ -619,7 +626,8 @@ where
         };
         match outcome {
             None => {
-                self.events.safe(|l| l.on_connection_created(&pooled, created_in));
+                self.events
+                    .safe(|l| l.on_connection_created(&pooled, created_in));
                 self.destroy_detached(pooled, CloseReason::PoolClosed).await;
                 Err(PoolError::Closed(format!("pool {:?} is closed", self.name)))
             }
@@ -634,7 +642,8 @@ where
                 })
             }
             Some(Ok(ev)) => {
-                self.events.safe(|l| l.on_connection_created(&ev, created_in));
+                self.events
+                    .safe(|l| l.on_connection_created(&ev, created_in));
                 Ok(key)
             }
         }
@@ -781,7 +790,8 @@ where
             g.size -= 1;
             self.notify.notify_waiters();
         }
-        self.events.safe(|l| l.on_connection_closed(&pooled, reason));
+        self.events
+            .safe(|l| l.on_connection_closed(&pooled, reason));
     }
 
     async fn close_conn(&self, pooled: &PooledConnection<T>) {
@@ -810,7 +820,8 @@ where
                     return;
                 }
                 Ok((pooled, created_in)) => {
-                    self.events.safe(|l| l.on_connection_created(&pooled, created_in));
+                    self.events
+                        .safe(|l| l.on_connection_created(&pooled, created_in));
                     if let Err(p) = self.park(pooled, self.clock.monotonic()) {
                         self.destroy_detached(p, CloseReason::PoolClosed).await;
                     }
@@ -1020,7 +1031,10 @@ mod tests {
 
         let bad = AsyncConnectionPool::new(
             h.factory(),
-            PoolConfig { max_size: 0, ..Default::default() },
+            PoolConfig {
+                max_size: 0,
+                ..Default::default()
+            },
             None,
         );
         assert!(matches!(bad, Err(PoolError::Config(_))));
@@ -1039,7 +1053,10 @@ mod tests {
     #[tokio::test]
     async fn max_waiters_backpressure() {
         let h = AsyncHarness::new();
-        let p = h.pool(PoolConfig { max_waiters: Some(0), ..plain(1) });
+        let p = h.pool(PoolConfig {
+            max_waiters: Some(0),
+            ..plain(1)
+        });
         let a = p.acquire(Timeout::Unset).await.unwrap();
         assert!(matches!(
             p.acquire(Timeout::Infinite).await,
@@ -1165,7 +1182,11 @@ mod tests {
         let h = AsyncHarness::new();
         h.fac.fail_next_creates(10);
         let p = h.pool(PoolConfig {
-            retry: RetryPolicy { max_attempts: 3, base_delay: 0.0, ..Default::default() },
+            retry: RetryPolicy {
+                max_attempts: 3,
+                base_delay: 0.0,
+                ..Default::default()
+            },
             ..plain(2)
         });
         assert!(matches!(
@@ -1200,7 +1221,12 @@ mod tests {
         h.fac.fail_next_creates(10);
         let p = h.pool(PoolConfig {
             acquire_timeout: Some(0.05),
-            retry: RetryPolicy { max_attempts: 5, base_delay: 100.0, jitter: 0.0, ..Default::default() },
+            retry: RetryPolicy {
+                max_attempts: 5,
+                base_delay: 100.0,
+                jitter: 0.0,
+                ..Default::default()
+            },
             ..plain(2)
         });
         assert!(matches!(
@@ -1440,7 +1466,10 @@ mod tests {
     #[tokio::test]
     async fn waiter_under_max_waiters_blocks_then_succeeds() {
         let h = AsyncHarness::new();
-        let p = h.pool(PoolConfig { max_waiters: Some(5), ..plain(1) });
+        let p = h.pool(PoolConfig {
+            max_waiters: Some(5),
+            ..plain(1)
+        });
         let a = p.acquire(Timeout::Unset).await.unwrap();
         let p2 = p.clone();
         let waiter = tokio::spawn(async move { p2.acquire(Timeout::Infinite).await.map(|c| c.id) });
@@ -1457,18 +1486,30 @@ mod tests {
         let p = h.pool(PoolConfig {
             acquire_timeout: Some(1.0),
             create_timeout: Some(0.01),
-            retry: RetryPolicy { max_attempts: 5, base_delay: 100.0, jitter: 0.0, ..Default::default() },
+            retry: RetryPolicy {
+                max_attempts: 5,
+                base_delay: 100.0,
+                jitter: 0.0,
+                ..Default::default()
+            },
             ..plain(2)
         });
         // create times out (limit=create_timeout, left still >0), then backoff (100s) exceeds
         // the acquire deadline -> Timeout from the timeout-arm's backoff.
-        assert!(matches!(p.acquire(Timeout::Unset).await, Err(PoolError::Timeout(_))));
+        assert!(matches!(
+            p.acquire(Timeout::Unset).await,
+            Err(PoolError::Timeout(_))
+        ));
     }
 
     #[tokio::test]
     async fn rotation_on_release() {
         let h = AsyncHarness::new();
-        let p = h.pool(PoolConfig { max_uses: Some(1), max_lifetime: None, ..plain(5) });
+        let p = h.pool(PoolConfig {
+            max_uses: Some(1),
+            max_lifetime: None,
+            ..plain(5)
+        });
         let a = p.acquire(Timeout::Unset).await.unwrap();
         p.release(a).await.unwrap(); // use_count==max_uses -> rotate on release
         assert_eq!(p.stats().closed_by_reason.get("max_uses"), Some(&1));
@@ -1480,12 +1521,23 @@ mod tests {
         h.fac.fail_next_creates(100);
         let p = h.pool(PoolConfig {
             acquire_timeout: Some(0.05),
-            retry: RetryPolicy { max_attempts: 5, base_delay: 100.0, jitter: 0.0, ..Default::default() },
+            retry: RetryPolicy {
+                max_attempts: 5,
+                base_delay: 100.0,
+                jitter: 0.0,
+                ..Default::default()
+            },
             maintenance_interval: None,
-            breaker: Some(BreakerConfig { failure_threshold: 1, ..Default::default() }),
+            breaker: Some(BreakerConfig {
+                failure_threshold: 1,
+                ..Default::default()
+            }),
             ..Default::default()
         });
-        assert!(matches!(p.acquire(Timeout::Unset).await, Err(PoolError::Timeout(_))));
+        assert!(matches!(
+            p.acquire(Timeout::Unset).await,
+            Err(PoolError::Timeout(_))
+        ));
         assert_eq!(p.stats().breaker_state.as_deref(), Some("closed"));
     }
 
@@ -1493,7 +1545,11 @@ mod tests {
     async fn create_limit_from_remaining_deadline() {
         // create_timeout None but a finite acquire deadline -> limit comes from remaining().
         let h = AsyncHarness::with_system_clock();
-        let p = h.pool(PoolConfig { create_timeout: None, acquire_timeout: Some(5.0), ..plain(2) });
+        let p = h.pool(PoolConfig {
+            create_timeout: None,
+            acquire_timeout: Some(5.0),
+            ..plain(2)
+        });
         let a = p.acquire(Timeout::Of(5.0)).await.unwrap();
         p.release(a).await.unwrap();
     }
@@ -1502,7 +1558,10 @@ mod tests {
     async fn create_with_no_limit_at_all() {
         // create_timeout None + Infinite acquire -> create_one runs with no timer.
         let h = AsyncHarness::with_system_clock();
-        let p = h.pool(PoolConfig { create_timeout: None, ..plain(2) });
+        let p = h.pool(PoolConfig {
+            create_timeout: None,
+            ..plain(2)
+        });
         let a = p.acquire(Timeout::Infinite).await.unwrap();
         p.release(a).await.unwrap();
     }
@@ -1518,7 +1577,10 @@ mod tests {
             ..plain(2)
         });
         // limit = min(create_timeout, remaining) = the acquire deadline -> PoolTimeout (abort).
-        assert!(matches!(p.acquire(Timeout::Unset).await, Err(PoolError::Timeout(_))));
+        assert!(matches!(
+            p.acquire(Timeout::Unset).await,
+            Err(PoolError::Timeout(_))
+        ));
     }
 
     #[tokio::test]
@@ -1528,7 +1590,11 @@ mod tests {
         let p = h.pool(PoolConfig {
             acquire_timeout: Some(5.0),
             create_timeout: Some(0.02),
-            retry: RetryPolicy { max_attempts: 2, base_delay: 0.0, ..Default::default() },
+            retry: RetryPolicy {
+                max_attempts: 2,
+                base_delay: 0.0,
+                ..Default::default()
+            },
             ..plain(2)
         });
         // each attempt times out (backend fault); backoff runs once; then ConnectionCreate.
@@ -1615,7 +1681,11 @@ mod tests {
     fn self_closing_create(ok: bool) -> (SelfClosePool, PoolConfig) {
         let cfg = PoolConfig {
             min_size: 0,
-            retry: RetryPolicy { max_attempts: 2, base_delay: 0.0, ..Default::default() },
+            retry: RetryPolicy {
+                max_attempts: 2,
+                base_delay: 0.0,
+                ..Default::default()
+            },
             maintenance_interval: None,
             breaker: None,
             ..Default::default()
@@ -1623,7 +1693,11 @@ mod tests {
         (build_self_closing(cfg.clone(), ok, false), cfg)
     }
 
-    fn build_self_closing(cfg: PoolConfig, create_ok: bool, close_on_validate: bool) -> SelfClosePool {
+    fn build_self_closing(
+        cfg: PoolConfig,
+        create_ok: bool,
+        close_on_validate: bool,
+    ) -> SelfClosePool {
         use std::sync::Mutex as StdMutex;
         let slot: Arc<StdMutex<Option<SelfClosePool>>> = Arc::new(StdMutex::new(None));
         let s_create = slot.clone();

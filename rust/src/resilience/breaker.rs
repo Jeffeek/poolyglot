@@ -141,9 +141,8 @@ impl CircuitBreaker {
         match g.state {
             BreakerState::Open => {
                 // refresh() already moved us out of OPEN once recovery elapsed, so wait > 0.
-                let wait = (self.cfg.recovery_timeout
-                    - (self.clock.monotonic() - g.opened_at))
-                    .max(0.0);
+                let wait =
+                    (self.cfg.recovery_timeout - (self.clock.monotonic() - g.opened_at)).max(0.0);
                 call_err = Some(PoolError::CircuitOpen { retry_after: wait });
             }
             BreakerState::HalfOpen => {
@@ -431,8 +430,7 @@ mod tests {
         // call() wrapper success + failure
         let ok: Result<i32, PoolError> = b.call(|| Ok::<_, PoolError>(5));
         assert_eq!(ok.unwrap(), 5);
-        let err: Result<i32, PoolError> =
-            b.call(|| Err::<i32, _>(PoolError::Timeout("t".into())));
+        let err: Result<i32, PoolError> = b.call(|| Err::<i32, _>(PoolError::Timeout("t".into())));
         assert!(err.is_err());
     }
 
@@ -447,9 +445,18 @@ mod tests {
     #[test]
     fn validate_each_threshold_branch() {
         for bad in [
-            BreakerConfig { failure_threshold: 0, ..Default::default() },
-            BreakerConfig { half_open_max_calls: 0, ..Default::default() },
-            BreakerConfig { success_threshold: 0, ..Default::default() },
+            BreakerConfig {
+                failure_threshold: 0,
+                ..Default::default()
+            },
+            BreakerConfig {
+                half_open_max_calls: 0,
+                ..Default::default()
+            },
+            BreakerConfig {
+                success_threshold: 0,
+                ..Default::default()
+            },
         ] {
             assert!(bad.validate().is_err());
         }

@@ -2,12 +2,18 @@ name: rust
 
 on:
   push:
+    branches: [main]
     paths: ["rust/**", ".github/workflows/rust.yml"]
   pull_request:
     paths: ["rust/**", ".github/workflows/rust.yml"]
 
 permissions:
   contents: read
+
+# A newer commit on the same ref cancels in-flight runs (PRs only; never cancel a main run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -47,3 +53,18 @@ jobs:
           flags: rust
           name: rust
           fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - name: Lint gate (clippy, warnings as errors)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Format check (warn-only)
+        continue-on-error: true
+        run: cargo fmt --check

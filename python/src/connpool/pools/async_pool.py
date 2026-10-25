@@ -11,21 +11,26 @@ import asyncio
 import logging
 import random
 from collections import deque
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Callable, Deque, Dict, Generic, Optional, Sequence, TypeVar
+from typing import Any, Generic, TypeVar
 
-from connpool.policy import lifecycle
-from connpool.core.timeouts import UNSET, Timeout, compute_deadline, remaining
-from connpool.resilience.breaker import CircuitBreaker
 from connpool.core.clock import Clock, SystemClock
-from connpool.policy.config import PoolConfig
 from connpool.core.connection import CloseReason, PooledConnection
 from connpool.core.errors import (
-    ConnectionCreateError, InvalidReleaseError, PoolClosedError, PoolExhaustedError, PoolTimeoutError,
+    ConnectionCreateError,
+    InvalidReleaseError,
+    PoolClosedError,
+    PoolExhaustedError,
+    PoolTimeoutError,
 )
-from connpool.observability.events import ListenerGroup, PoolListener
+from connpool.core.timeouts import UNSET, Timeout, compute_deadline, remaining
 from connpool.factories.async_factory import AsyncCallableFactory, AsyncConnectionFactory
+from connpool.observability.events import ListenerGroup, PoolListener
 from connpool.observability.stats import PoolStats, StatsCollector
+from connpool.policy import lifecycle
+from connpool.policy.config import PoolConfig
+from connpool.resilience.breaker import CircuitBreaker
 
 T = TypeVar("T")
 log = logging.getLogger("connpool")
@@ -42,11 +47,11 @@ class AsyncConnectionPool(Generic[T]):
     def __init__(
         self,
         factory: AsyncConnectionFactory[T],
-        config: Optional[PoolConfig] = None,
+        config: PoolConfig | None = None,
         *,
         listeners: Sequence[PoolListener] = (),
-        clock: Optional[Clock] = None,
-        rng: Optional[random.Random] = None,
+        clock: Clock | None = None,
+        rng: random.Random | None = None,
         name: str = "pool",
     ) -> None:
         self.name = name
@@ -56,32 +61,32 @@ class AsyncConnectionPool(Generic[T]):
         self._rng = rng or random.Random()
 
         self._cond = asyncio.Condition()
-        self._idle: Deque[PooledConnection[T]] = deque()
-        self._checked_out: Dict[int, PooledConnection[T]] = {}
+        self._idle: deque[PooledConnection[T]] = deque()
+        self._checked_out: dict[int, PooledConnection[T]] = {}
         self._size = 0
         self._waiters = 0
         self._closed = False
 
         self._stats = StatsCollector()
         self._events = ListenerGroup([self._stats, *listeners])
-        self._breaker: Optional[CircuitBreaker] = (
+        self._breaker: CircuitBreaker | None = (
             CircuitBreaker(self._cfg.breaker, self._clock,
                            on_state_change=lambda o, n: self._events.dispatch("on_breaker_state_change", o, n))
             if self._cfg.breaker else None
         )
-        self._task: Optional["asyncio.Task[None]"] = None
+        self._task: asyncio.Task[None] | None = None
         self._opened = False
 
     @classmethod
     def from_callables(
-        cls, create: Callable[[], Any], *, close: Optional[Callable[[T], Any]] = None,
-        validate: Optional[Callable[[T], Any]] = None, reset: Optional[Callable[[T], Any]] = None,
-        config: Optional[PoolConfig] = None, **kwargs: Any,
-    ) -> "AsyncConnectionPool[T]":
+        cls, create: Callable[[], Any], *, close: Callable[[T], Any] | None = None,
+        validate: Callable[[T], Any] | None = None, reset: Callable[[T], Any] | None = None,
+        config: PoolConfig | None = None, **kwargs: Any,
+    ) -> AsyncConnectionPool[T]:
         return cls(AsyncCallableFactory(create, close=close, validate=validate, reset=reset), config, **kwargs)
 
     # ------------------------------------------------------------------ lifecycle
-    async def open(self) -> "AsyncConnectionPool[T]":
+    async def open(self) -> AsyncConnectionPool[T]:
         if self._closed:
             raise PoolClosedError(f"pool {self.name!r} is closed")
         if self._opened:
@@ -96,7 +101,7 @@ class AsyncConnectionPool(Generic[T]):
             self._task = asyncio.create_task(self._maintenance_loop(), name=f"connpool-{self.name}")
         return self
 
-    async def close(self, timeout: Optional[float] = None) -> None:
+    async def close(self, timeout: float | None = None) -> None:
         """Close idle connections now; checked-out ones close on release. Idempotent.
         ``timeout`` (seconds) drains gracefully: wait up to this long for in-use
         connections to return. ``None`` (default) does not wait; ``0`` returns at once.
@@ -129,7 +134,7 @@ class AsyncConnectionPool(Generic[T]):
         for pooled in idle:
             await self._destroy(pooled, CloseReason.POOL_CLOSED)
 
-    async def __aenter__(self) -> "AsyncConnectionPool[T]":
+    async def __aenter__(self) -> AsyncConnectionPool[T]:
         return await self.open()
 
     async def __aexit__(self, *exc: object) -> None:
@@ -183,7 +188,7 @@ class AsyncConnectionPool(Generic[T]):
         self._events.dispatch("on_acquired", pooled, now - started)
         return pooled.raw
 
-    async def release(self, conn: T, *, discard: bool = False, error: Optional[BaseException] = None) -> None:
+    async def release(self, conn: T, *, discard: bool = False, error: BaseException | None = None) -> None:
         async with self._cond:
             pooled = self._checked_out.pop(id(conn), None)
         if pooled is None:
@@ -259,7 +264,7 @@ class AsyncConnectionPool(Generic[T]):
                 self._events.dispatch("on_connection_leak", pooled, held)
 
     # ----------------------------------------------------------------- internals
-    async def _take_idle_or_reserve(self, deadline: Optional[float]) -> Optional[PooledConnection[T]]:
+    async def _take_idle_or_reserve(self, deadline: float | None) -> PooledConnection[T] | None:
         async with self._cond:
             while True:
                 if self._closed:
@@ -287,7 +292,7 @@ class AsyncConnectionPool(Generic[T]):
                 finally:
                     self._waiters -= 1
 
-    async def _borrow_reason(self, pooled: PooledConnection[T]) -> Optional[CloseReason]:
+    async def _borrow_reason(self, pooled: PooledConnection[T]) -> CloseReason | None:
         now = self._clock.monotonic()
         reason = lifecycle.borrow_reason(pooled, self._cfg, now)
         if reason is None and lifecycle.needs_validation(pooled, self._cfg, now):
@@ -297,8 +302,8 @@ class AsyncConnectionPool(Generic[T]):
 
     async def _release_reason(
         self, pooled: PooledConnection[T], conn: T, discard: bool,
-        error: Optional[BaseException], now: float,
-    ) -> Optional[CloseReason]:
+        error: BaseException | None, now: float,
+    ) -> CloseReason | None:
         if discard:
             return CloseReason.DISCARDED
         if error is not None and (self._factory.is_fatal_error(error) or not await self._is_healthy(conn)):
@@ -308,7 +313,7 @@ class AsyncConnectionPool(Generic[T]):
             return reason
         try:
             await self._factory.reset(conn)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.warning("pool %r: reset failed; discarding %r", self.name, pooled, exc_info=True)
             return CloseReason.RESET_FAILED
         return None
@@ -316,7 +321,7 @@ class AsyncConnectionPool(Generic[T]):
     async def _is_healthy(self, raw: T) -> bool:
         try:
             return bool(await self._factory.validate(raw))
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.debug("pool %r: validate raised", self.name, exc_info=True)
             return False
 
@@ -329,7 +334,7 @@ class AsyncConnectionPool(Generic[T]):
             self._cond.notify()
             return True
 
-    async def _create(self, deadline: Optional[float]) -> tuple[PooledConnection[T], float]:
+    async def _create(self, deadline: float | None) -> tuple[PooledConnection[T], float]:
         """Returns the connection and how long the factory took; the caller fires
         ``on_connection_created`` once the connection is actually adopted."""
         started = self._clock.monotonic()
@@ -342,7 +347,7 @@ class AsyncConnectionPool(Generic[T]):
         pooled = lifecycle.new_connection(raw, self._cfg, now, self._rng)
         return pooled, now - started
 
-    def _create_limit(self, deadline: Optional[float]) -> Optional[float]:
+    def _create_limit(self, deadline: float | None) -> float | None:
         limits = [x for x in (self._cfg.create_timeout, remaining(deadline, self._clock.monotonic()))
                   if x is not None]
         return max(0.0, min(limits)) if limits else None
@@ -370,7 +375,7 @@ class AsyncConnectionPool(Generic[T]):
             await self._destroy(pooled, CloseReason.POOL_CLOSED)
             raise PoolClosedError(f"pool {self.name!r} is closed")
 
-    async def _create_raw(self, deadline: Optional[float]) -> T:
+    async def _create_raw(self, deadline: float | None) -> T:
         """The breaker sees one logical creation per call: fail-fast when open, a single
         success/failure for the whole retry sequence (see the sync pool for rationale)."""
         if self._breaker:
@@ -389,7 +394,7 @@ class AsyncConnectionPool(Generic[T]):
             self._breaker.record_success()
         return raw
 
-    async def _create_with_retry(self, deadline: Optional[float]) -> T:
+    async def _create_with_retry(self, deadline: float | None) -> T:
         retry, attempt = self._cfg.retry, 0
         while True:
             if self._closed:
@@ -438,7 +443,7 @@ class AsyncConnectionPool(Generic[T]):
     async def _dispose(self, pooled: PooledConnection[T], reason: CloseReason) -> None:
         try:
             await self._factory.close(pooled.raw)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.warning("pool %r: error closing %r", self.name, pooled, exc_info=True)
         finally:
             async with self._cond:
@@ -455,7 +460,7 @@ class AsyncConnectionPool(Generic[T]):
                 self._size += 1
             try:
                 pooled, created_in = await self._create(deadline=None)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("pool %r: warm-up failed: %s", self.name, exc)
                 return
             self._events.dispatch("on_connection_created", pooled, created_in)
@@ -469,7 +474,7 @@ class AsyncConnectionPool(Generic[T]):
             await asyncio.sleep(interval)
             try:
                 await self.run_maintenance()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception("pool %r: maintenance pass failed", self.name)
 
     def __repr__(self) -> str:

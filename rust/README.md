@@ -167,7 +167,13 @@ cargo test --all-features           # run all tests
 ./run_tests.sh                      # tests under coverage (cargo-llvm-cov)
 ./run_tests.sh -m                   # ...also list uncovered lines
 cargo run --example demo            # runnable demo
+./lint.sh                           # clippy -D warnings (gate) + cargo fmt --check report
+./lint.sh -f                        # ...auto-fix (cargo fmt + clippy --fix)
 ```
+
+Linting uses **clippy** (`cargo clippy --all-targets --all-features -- -D warnings`), gated;
+`cargo fmt --check` is warn-only (the sources are not yet rustfmt-clean). Needs the `clippy` + `rustfmt`
+components. CI runs these as a separate `lint` job.
 
 Coverage needs the `llvm-tools-preview` component and `cargo-llvm-cov`:
 

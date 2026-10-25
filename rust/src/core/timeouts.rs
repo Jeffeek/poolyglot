@@ -53,13 +53,19 @@ mod tests {
     #[test]
     fn compute_deadline_covers_all_kinds() {
         // Unset with a default -> now + default; without -> None.
-        assert_eq!(Timeout::Unset.compute_deadline(Some(30.0), 100.0), Some(130.0));
+        assert_eq!(
+            Timeout::Unset.compute_deadline(Some(30.0), 100.0),
+            Some(130.0)
+        );
         assert_eq!(Timeout::Unset.compute_deadline(None, 100.0), None);
         // Infinite -> None regardless.
         assert_eq!(Timeout::Infinite.compute_deadline(Some(30.0), 100.0), None);
         // Of -> now + seconds (0 = immediate).
         assert_eq!(Timeout::Of(5.0).compute_deadline(None, 100.0), Some(105.0));
-        assert_eq!(Timeout::Of(0.0).compute_deadline(Some(30.0), 100.0), Some(100.0));
+        assert_eq!(
+            Timeout::Of(0.0).compute_deadline(Some(30.0), 100.0),
+            Some(100.0)
+        );
     }
 
     #[test]

@@ -20,10 +20,6 @@ func mustOpenAsync[T comparable](t *testing.T, p *AsyncConnectionPool[T]) {
 	}
 }
 
-func asyncQuietPool(factory AsyncConnectionFactory[*FakeConn], cfg PoolConfig, opts *Options[*FakeConn]) *AsyncConnectionPool[*FakeConn] {
-	return mustAsyncPool(factory, cfg, opts)
-}
-
 // spinUntil polls cond with a short sleep until true or a timeout elapses, failing the test.
 func spinUntil(t *testing.T, cond func() bool) {
 	t.Helper()

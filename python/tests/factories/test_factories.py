@@ -1,7 +1,10 @@
 import unittest
 
 from connpool import (
-    AsyncCallableFactory, AsyncConnectionFactory, CallableFactory, ConnectionFactory,
+    AsyncCallableFactory,
+    AsyncConnectionFactory,
+    CallableFactory,
+    ConnectionFactory,
 )
 
 

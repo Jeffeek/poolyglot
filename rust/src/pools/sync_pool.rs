@@ -107,7 +107,9 @@ where
     ) -> Result<Self, PoolError> {
         config.validate()?;
         let options = options.unwrap_or_default();
-        let clock: Arc<dyn Clock> = options.clock.unwrap_or_else(|| Arc::new(SystemClock::new()));
+        let clock: Arc<dyn Clock> = options
+            .clock
+            .unwrap_or_else(|| Arc::new(SystemClock::new()));
         let rng: Box<dyn Rng> = options.rng.unwrap_or_else(|| Box::new(SystemRng::new()));
         let name = options.name.unwrap_or_else(|| "pool".to_string());
 
@@ -166,7 +168,10 @@ where
         let start_thread = {
             let mut g = self.0.state.lock().unwrap();
             if g.closed {
-                return Err(PoolError::Closed(format!("pool {:?} is closed", self.0.name)));
+                return Err(PoolError::Closed(format!(
+                    "pool {:?} is closed",
+                    self.0.name
+                )));
             }
             if g.opened {
                 return Ok(());
@@ -528,18 +533,15 @@ where
         Ok((self.new_conn(raw, now), now - started))
     }
 
-    fn register_new(
-        &self,
-        pooled: PooledConnection<T>,
-        created_in: f64,
-    ) -> Result<T, PoolError> {
+    fn register_new(&self, pooled: PooledConnection<T>, created_in: f64) -> Result<T, PoolError> {
         let key = pooled.raw.clone();
         let ev;
         {
             let mut g = self.state.lock().unwrap();
             if g.closed {
                 drop(g);
-                self.events.safe(|l| l.on_connection_created(&pooled, created_in));
+                self.events
+                    .safe(|l| l.on_connection_created(&pooled, created_in));
                 self.destroy_detached(pooled, CloseReason::PoolClosed);
                 return Err(PoolError::Closed(format!("pool {:?} is closed", self.name)));
             }
@@ -557,7 +559,8 @@ where
             ev = pooled.clone();
             g.checked_out.insert(key.clone(), pooled);
         }
-        self.events.safe(|l| l.on_connection_created(&ev, created_in));
+        self.events
+            .safe(|l| l.on_connection_created(&ev, created_in));
         Ok(key)
     }
 
@@ -663,7 +666,8 @@ where
             g.size -= 1;
             self.signal();
         }
-        self.events.safe(|l| l.on_connection_closed(&pooled, reason));
+        self.events
+            .safe(|l| l.on_connection_closed(&pooled, reason));
     }
 
     fn close_conn(&self, pooled: &PooledConnection<T>) {
@@ -671,7 +675,10 @@ where
         let result = catch_unwind(AssertUnwindSafe(|| self.factory.close(raw)));
         match result {
             Ok(Ok(())) => {}
-            Ok(Err(e)) => eprintln!("connpool: pool {:?}: error closing {}: {}", self.name, pooled, e),
+            Ok(Err(e)) => eprintln!(
+                "connpool: pool {:?}: error closing {}: {}",
+                self.name, pooled, e
+            ),
             Err(_) => eprintln!("connpool: pool {:?}: panic closing {}", self.name, pooled),
         }
     }
@@ -691,7 +698,8 @@ where
                     return;
                 }
                 Ok((pooled, created_in)) => {
-                    self.events.safe(|l| l.on_connection_created(&pooled, created_in));
+                    self.events
+                        .safe(|l| l.on_connection_created(&pooled, created_in));
                     if let Err(p) = self.park(pooled, self.clock.monotonic()) {
                         self.destroy_detached(p, CloseReason::PoolClosed);
                     }
@@ -826,8 +834,8 @@ mod tests {
     use crate::resilience::breaker::BreakerConfig;
     use crate::resilience::retry::RetryPolicy;
     use crate::test_support::*;
-    use std::sync::atomic::Ordering;
     use std::sync::Arc;
+    use std::sync::atomic::Ordering;
 
     /// A config with background maintenance and breaker off (the default for most tests).
     fn plain(max_size: usize) -> PoolConfig {
@@ -961,7 +969,14 @@ mod tests {
     #[test]
     fn config_validation_surfaces_on_new() {
         let h = Harness::new();
-        let result = ConnectionPool::new(h.factory(), PoolConfig { max_size: 0, ..Default::default() }, None);
+        let result = ConnectionPool::new(
+            h.factory(),
+            PoolConfig {
+                max_size: 0,
+                ..Default::default()
+            },
+            None,
+        );
         assert!(matches!(result, Err(PoolError::Config(_))));
     }
 
@@ -1199,7 +1214,10 @@ mod tests {
             ..Default::default()
         });
         // retry backoff exceeds deadline -> Timeout -> breaker records an abort, not a failure
-        assert!(matches!(pool.acquire(Timeout::Unset), Err(PoolError::Timeout(_))));
+        assert!(matches!(
+            pool.acquire(Timeout::Unset),
+            Err(PoolError::Timeout(_))
+        ));
         assert_eq!(pool.stats().breaker_state.as_deref(), Some("closed"));
     }
 
@@ -1368,7 +1386,10 @@ mod tests {
             PoolConfig {
                 retry: RetryPolicy::no_retry(),
                 maintenance_interval: None,
-                breaker: Some(BreakerConfig { failure_threshold: 1, ..Default::default() }),
+                breaker: Some(BreakerConfig {
+                    failure_threshold: 1,
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             vec![rec.clone()],
@@ -1380,7 +1401,10 @@ mod tests {
     #[test]
     fn waiter_under_max_waiters_blocks_then_succeeds() {
         let h = Harness::new();
-        let pool = h.pool(PoolConfig { max_waiters: Some(5), ..plain(1) });
+        let pool = h.pool(PoolConfig {
+            max_waiters: Some(5),
+            ..plain(1)
+        });
         let a = pool.acquire(Timeout::Unset).unwrap();
         let p2 = pool.clone();
         let waiter = std::thread::spawn(move || p2.acquire(Timeout::Infinite).map(|c| c.id));
@@ -1396,7 +1420,12 @@ mod tests {
         h.fac.fail_next_creates(1);
         let pool = h.pool(PoolConfig {
             acquire_timeout: None, // no deadline -> remaining() is None in the retry loop
-            retry: RetryPolicy { max_attempts: 3, base_delay: 1.0, jitter: 0.0, ..Default::default() },
+            retry: RetryPolicy {
+                max_attempts: 3,
+                base_delay: 1.0,
+                jitter: 0.0,
+                ..Default::default()
+            },
             ..plain(2)
         });
         let a = pool.acquire(Timeout::Unset).unwrap(); // first create fails, sleeps, then ok
@@ -1476,7 +1505,10 @@ mod tests {
         let pool = ConnectionPool::new(factory, plain(2), None).unwrap();
         *slot.lock().unwrap() = Some(pool.clone());
         // create succeeds then register_new sees the pool closed.
-        assert!(matches!(pool.acquire(Timeout::Unset), Err(PoolError::Closed(_))));
+        assert!(matches!(
+            pool.acquire(Timeout::Unset),
+            Err(PoolError::Closed(_))
+        ));
     }
 
     #[test]
@@ -1493,14 +1525,21 @@ mod tests {
         let pool = ConnectionPool::new(
             factory,
             PoolConfig {
-                retry: RetryPolicy { max_attempts: 3, base_delay: 0.0, ..Default::default() },
+                retry: RetryPolicy {
+                    max_attempts: 3,
+                    base_delay: 0.0,
+                    ..Default::default()
+                },
                 ..plain(2)
             },
             None,
         )
         .unwrap();
         *slot.lock().unwrap() = Some(pool.clone());
-        assert!(matches!(pool.acquire(Timeout::Unset), Err(PoolError::Closed(_))));
+        assert!(matches!(
+            pool.acquire(Timeout::Unset),
+            Err(PoolError::Closed(_))
+        ));
     }
 
     #[test]

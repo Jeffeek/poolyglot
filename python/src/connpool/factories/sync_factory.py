@@ -6,7 +6,8 @@ implement ``ConnectionFactory`` - or just pass callables via ``CallableFactory``
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable, Generic, Optional, TypeVar
+from collections.abc import Callable
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -44,10 +45,10 @@ class CallableFactory(ConnectionFactory[T]):
         self,
         create: Callable[[], T],
         *,
-        close: Optional[Callable[[T], None]] = None,
-        validate: Optional[Callable[[T], bool]] = None,
-        reset: Optional[Callable[[T], None]] = None,
-        is_fatal_error: Optional[Callable[[BaseException], bool]] = None,
+        close: Callable[[T], None] | None = None,
+        validate: Callable[[T], bool] | None = None,
+        reset: Callable[[T], None] | None = None,
+        is_fatal_error: Callable[[BaseException], bool] | None = None,
     ) -> None:
         self._create, self._close, self._validate = create, close, validate
         self._reset, self._is_fatal = reset, is_fatal_error

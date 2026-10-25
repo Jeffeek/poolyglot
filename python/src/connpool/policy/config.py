@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field, replace
-from typing import Any, Optional
+from typing import Any
 
-from connpool.resilience.breaker import BreakerConfig
 from connpool.core.errors import PoolConfigError
+from connpool.resilience.breaker import BreakerConfig
 from connpool.resilience.retry import RetryPolicy
 
 
@@ -22,32 +22,32 @@ class PoolConfig:
     max_size: int = 10                      # hard cap (idle + in use + being created)
 
     # --- timeouts (seconds; None = no limit) ---
-    acquire_timeout: Optional[float] = 30.0   # default wait in acquire()
-    create_timeout: Optional[float] = 10.0    # enforced by AsyncConnectionPool only; sync
+    acquire_timeout: float | None = 30.0   # default wait in acquire()
+    create_timeout: float | None = 10.0    # enforced by AsyncConnectionPool only; sync
                                               # factories must enforce their own connect timeout
-    max_waiters: Optional[int] = None         # backpressure: cap callers blocked in acquire()
+    max_waiters: int | None = None         # backpressure: cap callers blocked in acquire()
                                               # (None = unlimited; 0 = never wait when full)
 
     # --- rotation / recycling ---
-    max_lifetime: Optional[float] = 1800.0  # retire connections after this age
+    max_lifetime: float | None = 1800.0  # retire connections after this age
     lifetime_jitter: float = 0.1            # shave up to 10% off each lifetime so a
                                             # whole pool never expires at the same instant
-    max_idle_time: Optional[float] = 600.0  # evict idle connections (down to min_size)
-    max_uses: Optional[int] = None          # retire after N checkouts
+    max_idle_time: float | None = 600.0  # evict idle connections (down to min_size)
+    max_uses: int | None = None          # retire after N checkouts
     idle_strategy: IdleStrategy = IdleStrategy.LIFO
 
     # --- health ---
-    validate_after_idle: Optional[float] = 30.0  # validate on checkout if idle >= this
+    validate_after_idle: float | None = 30.0  # validate on checkout if idle >= this
                                                  # (0 = always, None = never)
-    maintenance_interval: Optional[float] = 30.0  # background sweep period (None = off)
-    leak_detection_timeout: Optional[float] = None  # warn when a borrowed connection is held
+    maintenance_interval: float | None = 30.0  # background sweep period (None = off)
+    leak_detection_timeout: float | None = None  # warn when a borrowed connection is held
                                                     # longer than this (None = off); needs open()
     validate_idle: bool = False             # validate idle connections during the maintenance
                                             # sweep and evict dead ones (needs open(); adds I/O)
 
     # --- resilience ---
     retry: RetryPolicy = field(default_factory=RetryPolicy)
-    breaker: Optional[BreakerConfig] = field(default_factory=BreakerConfig)  # None = off
+    breaker: BreakerConfig | None = field(default_factory=BreakerConfig)  # None = off
 
     def __post_init__(self) -> None:
         def need(ok: bool, msg: str) -> None:
@@ -67,6 +67,6 @@ class PoolConfig:
         need(self.max_uses is None or self.max_uses >= 1, "max_uses must be >= 1 or None")
         need(self.max_waiters is None or self.max_waiters >= 0, "max_waiters must be >= 0 or None")
 
-    def replace(self, **changes: Any) -> "PoolConfig":
+    def replace(self, **changes: Any) -> PoolConfig:
         """Return a modified copy (the config itself is immutable)."""
         return replace(self, **changes)

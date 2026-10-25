@@ -2,12 +2,18 @@ name: go
 
 on:
   push:
+    branches: [main]
     paths: ["go/**", ".github/workflows/go.yml"]
   pull_request:
     paths: ["go/**", ".github/workflows/go.yml"]
 
 permissions:
   contents: read
+
+# A newer commit on the same ref cancels in-flight runs (PRs only; never cancel a main run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -43,3 +49,21 @@ jobs:
           flags: go
           name: go
           fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Lint gate (golangci-lint)
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          working-directory: go
+      - name: Format check (warn-only)
+        continue-on-error: true
+        run: |
+          out=$(gofmt -l .); if [ -n "$out" ]; then echo "Unformatted:"; echo "$out"; exit 1; fi

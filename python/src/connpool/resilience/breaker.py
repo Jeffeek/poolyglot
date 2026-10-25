@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import enum
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, TypeVar
+from typing import Optional, TypeVar
 
 from connpool.core.clock import Clock, SystemClock
 from connpool.core.errors import CircuitOpenError, PoolConfigError
@@ -39,7 +40,7 @@ class BreakerConfig:
             raise PoolConfigError("breaker.recovery_timeout must be >= 0")
 
 
-_Transition = Optional[Tuple[BreakerState, BreakerState]]
+_Transition = Optional[tuple[BreakerState, BreakerState]]
 
 
 class CircuitBreaker:
@@ -47,9 +48,9 @@ class CircuitBreaker:
 
     def __init__(
         self,
-        config: Optional[BreakerConfig] = None,
-        clock: Optional[Clock] = None,
-        on_state_change: Optional[Callable[[BreakerState, BreakerState], None]] = None,
+        config: BreakerConfig | None = None,
+        clock: Clock | None = None,
+        on_state_change: Callable[[BreakerState, BreakerState], None] | None = None,
     ) -> None:
         self._cfg = config or BreakerConfig()
         self._clock = clock or SystemClock()
@@ -72,7 +73,7 @@ class CircuitBreaker:
 
     def before_call(self) -> None:
         """Raise ``CircuitOpenError`` if the call must not be attempted."""
-        error: Optional[CircuitOpenError] = None
+        error: CircuitOpenError | None = None
         with self._lock:
             transition = self._refresh()
             if self._state is BreakerState.OPEN:

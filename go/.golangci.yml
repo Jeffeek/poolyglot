@@ -1,0 +1,28 @@
+# golangci-lint v2 config. The CI `lint` job runs `golangci-lint run` as a gate; formatting
+# is checked separately (warn-only `gofmt -l`), so style churn never blocks a build. Only
+# high-signal bug / dead-code linters are enabled.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - govet # suspicious constructs (also run standalone by `go vet`)
+    - staticcheck # bug-detection (SA* checks only; see settings)
+    - ineffassign # assignments never read
+    - unused # unused functions, types, fields, consts
+    - errcheck # unchecked error returns
+  settings:
+    staticcheck:
+      # SA* = correctness/bug checks only. Skip the stylistic S*/ST*/QF* families so the
+      # gate stays about bugs, not formatting opinions.
+      checks: ["SA*"]
+  exclusions:
+    generated: lax
+    rules:
+      # Tests legitimately ignore some error returns (e.g. best-effort cleanup).
+      - path: _test\.go
+        linters:
+          - errcheck

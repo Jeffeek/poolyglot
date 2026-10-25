@@ -9,7 +9,7 @@
  *   * Listener hooks stay synchronous (keep them fast).
  */
 import { type Clock, SystemClock } from "../core/clock.js";
-import { CloseReason, PooledConnection } from "../core/connection.js";
+import { CloseReason, type PooledConnection } from "../core/connection.js";
 import {
   ConnectionCreateError,
   InvalidReleaseError,
@@ -28,7 +28,7 @@ import { type PoolStats, StatsCollector } from "../observability/stats.js";
 import { PoolConfig } from "../policy/config.js";
 import * as lifecycle from "../policy/lifecycle.js";
 import { CircuitBreaker } from "../resilience/breaker.js";
-import { type Rng } from "../resilience/retry.js";
+import type { Rng } from "../resilience/retry.js";
 import { AsyncCondition, CancelledError, abortError, awaitShielded } from "./async-primitives.js";
 
 /** Internal marker: the `createTimeout`/deadline limit elapsed while creating a connection. */
@@ -117,7 +117,11 @@ export class AsyncConnectionPool<T extends object> {
     if (clock !== undefined) poolOptions.clock = clock;
     if (rng !== undefined) poolOptions.rng = rng;
     if (name !== undefined) poolOptions.name = name;
-    return new AsyncConnectionPool(new AsyncCallableFactory(create, factoryOpts), config, poolOptions);
+    return new AsyncConnectionPool(
+      new AsyncCallableFactory(create, factoryOpts),
+      config,
+      poolOptions,
+    );
   }
 
   // ------------------------------------------------------------------ lifecycle
@@ -622,10 +626,7 @@ export class AsyncConnectionPool<T extends object> {
     }
   }
 
-  private callCreateWithLimit(
-    limit: number | null,
-    signal: AbortSignal | undefined,
-  ): Promise<T> {
+  private callCreateWithLimit(limit: number | null, signal: AbortSignal | undefined): Promise<T> {
     const work = Promise.resolve(this.factory.create());
     if (signal?.aborted) {
       work.catch(() => {});

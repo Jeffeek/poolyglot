@@ -5,10 +5,11 @@ swallowed - a broken metrics exporter must never break the pool."""
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, List
+from collections.abc import Iterable
+from typing import Any
 
-from connpool.resilience.breaker import BreakerState
 from connpool.core.connection import CloseReason, PooledConnection
+from connpool.resilience.breaker import BreakerState
 
 log = logging.getLogger("connpool")
 
@@ -26,11 +27,11 @@ class PoolListener:
 
 class ListenerGroup:
     def __init__(self, listeners: Iterable[PoolListener]) -> None:
-        self._listeners: List[PoolListener] = list(listeners)
+        self._listeners: list[PoolListener] = list(listeners)
 
     def dispatch(self, hook: str, *args: object) -> None:
         for listener in self._listeners:
             try:
                 getattr(listener, hook)(*args)
-            except Exception:  # noqa: BLE001 - listeners must never break the pool
+            except Exception:
                 log.exception("pool listener %r failed in %s", listener, hook)

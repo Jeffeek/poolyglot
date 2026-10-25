@@ -4,7 +4,7 @@ from __future__ import annotations
 import enum
 import itertools
 from dataclasses import dataclass, field
-from typing import Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 _ids = itertools.count(1)
@@ -29,9 +29,9 @@ class PooledConnection(Generic[T]):
 
     raw: T
     created_at: float
-    expires_at: Optional[float] = None
-    last_returned_at: Optional[float] = None
-    checked_out_at: Optional[float] = None
+    expires_at: float | None = None
+    last_returned_at: float | None = None
+    checked_out_at: float | None = None
     use_count: int = 0
     leak_reported: bool = False
     id: int = field(default_factory=lambda: next(_ids))

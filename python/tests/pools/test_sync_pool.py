@@ -4,9 +4,19 @@ import time
 import unittest
 
 from connpool import (
-    BreakerConfig, CallableFactory, CircuitOpenError, CloseReason, ConnectionCreateError,
-    ConnectionPool, IdleStrategy, InvalidReleaseError, ManualClock, PoolClosedError,
-    PoolExhaustedError, PoolTimeoutError, RetryPolicy,
+    BreakerConfig,
+    CallableFactory,
+    CircuitOpenError,
+    CloseReason,
+    ConnectionCreateError,
+    ConnectionPool,
+    IdleStrategy,
+    InvalidReleaseError,
+    ManualClock,
+    PoolClosedError,
+    PoolExhaustedError,
+    PoolTimeoutError,
+    RetryPolicy,
 )
 from tests.support.helpers import FakeConn, FakeFactory, Recorder, quiet_config
 
@@ -203,26 +213,23 @@ class HealthTests(PoolTestCase):
     def test_fatal_error_discards_connection(self):
         self.factory = FakeFactory(); self.factory.fatal_types = (ConnectionResetError,)
         pool = self.make(self.factory)
-        with self.assertRaises(ConnectionResetError):
-            with pool.connection() as c:
-                raise ConnectionResetError()
+        with self.assertRaises(ConnectionResetError), pool.connection() as c:
+            raise ConnectionResetError()
         self.assertTrue(c.closed)
         self.assertEqual(self.rec.closed, [CloseReason.ERROR])
 
     def test_benign_error_keeps_healthy_connection(self):
         pool = self.make()
-        with self.assertRaises(ValueError):
-            with pool.connection() as c:
-                raise ValueError("app bug")
+        with self.assertRaises(ValueError), pool.connection() as c:
+            raise ValueError("app bug")
         self.assertFalse(c.closed)
         self.assertEqual(pool.stats().idle, 1)
 
     def test_error_plus_failed_validation_discards(self):
         pool = self.make()
-        with self.assertRaises(ValueError):
-            with pool.connection() as c:
-                c.healthy = False
-                raise ValueError()
+        with self.assertRaises(ValueError), pool.connection() as c:
+            c.healthy = False
+            raise ValueError()
         self.assertTrue(c.closed)
 
     def test_reset_failure_discards(self):
@@ -480,7 +487,7 @@ class ConcurrencyTests(PoolTestCase):
                         time.sleep(rng.random() * 0.002)
                         with lock:
                             state["now"] -= 1
-            except Exception as exc:                            # noqa: BLE001
+            except Exception as exc:
                 errors.append(exc)
 
         threads = [threading.Thread(target=worker, args=(i,)) for i in range(20)]
@@ -525,7 +532,7 @@ class BackpressureTests(PoolTestCase):
         def wait_one():
             try:
                 pool.release(pool.acquire(timeout=5))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
         t = threading.Thread(target=wait_one); t.start()

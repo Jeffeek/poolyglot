@@ -110,8 +110,14 @@ pip install -e ".[dev]"                           # + coverage/pytest/mypy
 python -m unittest discover -s tests -t .         # 142 tests, ~2s
 ./run_tests.sh                                     # same, with a compact coverage report (gate: 100%)
 mypy                                               # strict type check (config in pyproject.toml)
+./lint.sh                                          # ruff: lint gate + style/format report
+./lint.sh -f                                       # ...auto-fix lint findings + reformat
 python examples/database/sqlite_demo.py
 ```
+
+Linting & formatting use **ruff** (config in `[tool.ruff]`). The gate blocks only on high-signal
+bug / dead-code rules (`ruff check --select F,B`); the full style set and `ruff format` are
+report/warn-only. CI runs both as a separate `lint` job.
 
 (`pytest` works too if installed; configuration is in `pyproject.toml`.)
 Examples importing `paramiko` or `psycopg` need those packages; the library never does.

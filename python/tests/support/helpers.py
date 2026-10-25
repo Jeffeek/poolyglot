@@ -3,7 +3,11 @@ import itertools
 import threading
 
 from connpool import (
-    AsyncConnectionFactory, ConnectionFactory, NO_RETRY, PoolConfig, PoolListener,
+    NO_RETRY,
+    AsyncConnectionFactory,
+    ConnectionFactory,
+    PoolConfig,
+    PoolListener,
 )
 
 _ids = itertools.count(1)

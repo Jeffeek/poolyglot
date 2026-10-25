@@ -2,12 +2,18 @@ name: java
 
 on:
   push:
+    branches: [main]
     paths: ["java/**", ".github/workflows/java.yml"]
   pull_request:
     paths: ["java/**", ".github/workflows/java.yml"]
 
 permissions:
   contents: read
+
+# A newer commit on the same ref cancels in-flight runs (PRs only; never cancel a main run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -38,3 +44,19 @@ jobs:
           flags: java
           name: java
           fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Lint gate (SpotBugs, high confidence)
+        run: mvn -q -B -DskipTests compile spotbugs:check
+      - name: Format check (warn-only)
+        continue-on-error: true
+        run: mvn -q -B spotless:check

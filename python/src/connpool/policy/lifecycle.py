@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import random
 from collections import deque
-from typing import Any, Deque, Iterable, List, Optional, Tuple, TypeVar
+from collections.abc import Iterable
+from typing import Any, TypeVar
 
-from connpool.policy.config import IdleStrategy, PoolConfig
 from connpool.core.connection import CloseReason, PooledConnection
+from connpool.policy.config import IdleStrategy, PoolConfig
 
 T = TypeVar("T")
 
@@ -23,13 +24,13 @@ def new_connection(raw: T, cfg: PoolConfig, now: float, rng: random.Random) -> P
     return PooledConnection(raw=raw, created_at=now, expires_at=expires_at)
 
 
-def pop_idle(idle: Deque[PooledConnection[T]], strategy: IdleStrategy) -> Optional[PooledConnection[T]]:
+def pop_idle(idle: deque[PooledConnection[T]], strategy: IdleStrategy) -> PooledConnection[T] | None:
     if not idle:
         return None
     return idle.pop() if strategy is IdleStrategy.LIFO else idle.popleft()
 
 
-def rotation_reason(c: PooledConnection[Any], cfg: PoolConfig, now: float) -> Optional[CloseReason]:
+def rotation_reason(c: PooledConnection[Any], cfg: PoolConfig, now: float) -> CloseReason | None:
     """Connections that must be retired no matter what (lifetime / use-count rotation)."""
     if c.expires_at is not None and now >= c.expires_at:
         return CloseReason.EXPIRED
@@ -46,7 +47,7 @@ def needs_validation(c: PooledConnection[Any], cfg: PoolConfig, now: float) -> b
     return cfg.validate_after_idle is not None and c.idle_time(now) >= cfg.validate_after_idle
 
 
-def borrow_reason(c: PooledConnection[Any], cfg: PoolConfig, now: float) -> Optional[CloseReason]:
+def borrow_reason(c: PooledConnection[Any], cfg: PoolConfig, now: float) -> CloseReason | None:
     """Static checks applied to an idle connection about to be handed out
     (validation, which needs I/O, is done by the pool afterwards)."""
     reason = rotation_reason(c, cfg, now)
@@ -57,11 +58,11 @@ def borrow_reason(c: PooledConnection[Any], cfg: PoolConfig, now: float) -> Opti
 
 def sweep(
     idle: Iterable[PooledConnection[T]], total_size: int, cfg: PoolConfig, now: float
-) -> Tuple[List[PooledConnection[T]], List[Tuple[PooledConnection[T], CloseReason]]]:
+) -> tuple[list[PooledConnection[T]], list[tuple[PooledConnection[T], CloseReason]]]:
     """Split idle connections into (keep, evict). Rotation victims always go;
     idle-timeout victims go only while the pool stays at or above ``min_size``."""
-    keep: List[PooledConnection[T]] = []
-    doomed: List[Tuple[PooledConnection[T], CloseReason]] = []
+    keep: list[PooledConnection[T]] = []
+    doomed: list[tuple[PooledConnection[T], CloseReason]] = []
     remaining = total_size
     for c in idle:
         reason = rotation_reason(c, cfg, now)

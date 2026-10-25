@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Tuple, Type
 
 from connpool.core.errors import PoolConfigError
 
@@ -22,7 +21,7 @@ class RetryPolicy:
     max_delay: float = 5.0
     multiplier: float = 2.0
     jitter: float = 0.5
-    retry_on: Tuple[Type[BaseException], ...] = (Exception,)
+    retry_on: tuple[type[BaseException], ...] = (Exception,)
 
     def __post_init__(self) -> None:
         if self.max_attempts < 1:

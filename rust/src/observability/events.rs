@@ -100,10 +100,8 @@ mod tests {
     #[test]
     fn dispatch_isolates_panics_and_reaches_all() {
         let count = Arc::new(AtomicU32::new(0));
-        let group: Listeners<u32> = Listeners::new(vec![
-            Arc::new(Panicky),
-            Arc::new(Counting(count.clone())),
-        ]);
+        let group: Listeners<u32> =
+            Listeners::new(vec![Arc::new(Panicky), Arc::new(Counting(count.clone()))]);
         group.safe(|l| l.on_acquire_timeout(2.0));
         // The counting listener still ran despite the panicky one.
         assert_eq!(count.load(Ordering::SeqCst), 1);

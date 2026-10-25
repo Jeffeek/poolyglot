@@ -1,0 +1,31 @@
+root = true
+
+[*.cs]
+# ---------------------------------------------------------------------------
+# Roslyn analyzer calibration for ConnPool.
+#
+# Analyzers run at AnalysisLevel=latest-recommended (see ConnPool.csproj). The CI
+# `lint` job builds with -warnaserror, so every analyzer warning that fires is a
+# hard gate. The rules below are dialed down because they conflict with the
+# project's *deliberate, cross-language* design, or are
+# low-signal style noise we surface in the IDE but don't gate on.
+# ---------------------------------------------------------------------------
+
+# --- deliberate design: kept silent (cross-language parity is the whole point) ---
+# CloseReason/PoolError names and wire values must match the Python/Go/Rust/... ports;
+# renaming PoolError to "PoolException" would break that parity.
+dotnet_diagnostic.CA1710.severity = none
+# Parameter names (`error`, `new`, ...) are part of the shared, cross-language API surface.
+dotnet_diagnostic.CA1716.severity = none
+# Static `Create(...)` factory methods on the generic pool/factory types are the public API.
+dotnet_diagnostic.CA1000.severity = none
+# Disposal is intentionally *shielded* from the caller's CancellationToken (mirrors
+# Python's asyncio.shield); forwarding the token here would change behavior.
+dotnet_diagnostic.CA2016.severity = none
+# AsyncCondition deliberately does not own/dispose the SemaphoreSlim's lifetime here.
+dotnet_diagnostic.CA1001.severity = none
+
+# --- low-signal style: shown as IDE suggestions, not gated ---
+dotnet_diagnostic.CA1805.severity = suggestion  # explicit init to default (readability choice)
+dotnet_diagnostic.CA1816.severity = suggestion  # GC.SuppressFinalize (no finalizers here)
+dotnet_diagnostic.CA2250.severity = suggestion  # ThrowIfCancellationRequested micro-style

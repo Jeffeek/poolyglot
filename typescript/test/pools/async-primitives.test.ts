@@ -27,9 +27,7 @@ test("CancelledError carries a default and custom message", () => {
 test("abortError returns the reason, or a CancelledError when absent", () => {
   const reason = new Error("r");
   assert.equal(abortError({ reason } as unknown as AbortSignal), reason);
-  assert.ok(
-    abortError({ reason: undefined } as unknown as AbortSignal) instanceof CancelledError,
-  );
+  assert.ok(abortError({ reason: undefined } as unknown as AbortSignal) instanceof CancelledError);
 });
 
 test("lock is exclusive and hands off to the next queued locker", async () => {

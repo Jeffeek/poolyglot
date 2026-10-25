@@ -163,7 +163,11 @@ test("retry and breaker count one failure per logical acquire", async (t) => {
 });
 
 test("create timeout is enforced", async (t) => {
-  const { pool } = make(t, { createTimeout: 0.05 }, { factory: new AsyncFakeFactory(new FakeInner(), 5) });
+  const { pool } = make(
+    t,
+    { createTimeout: 0.05 },
+    { factory: new AsyncFakeFactory(new FakeInner(), 5) },
+  );
   await assert.rejects(pool.acquire(), ConnectionCreateError);
   assert.equal(pool.stats().size, 0);
 });
@@ -208,7 +212,10 @@ test("close wakes waiters", async (t) => {
 
 test("maintenance task warms up and context closes everything", async (t) => {
   const factory = new AsyncFakeFactory();
-  const pool = new AsyncConnectionPool(factory, quietConfig({ minSize: 2, maintenanceInterval: 0.02 }));
+  const pool = new AsyncConnectionPool(
+    factory,
+    quietConfig({ minSize: 2, maintenanceInterval: 0.02 }),
+  );
   t.after(() => pool.close().catch(() => {}));
   await pool.open();
   assert.equal(pool.stats().idle, 2);
@@ -230,9 +237,16 @@ test("open racing close does not leak a maintenance loop", async (t) => {
       }
       return new FakeConn();
     },
-    { close: (c) => void (c.closed = true) },
+    {
+      close: (c) => {
+        c.closed = true;
+      },
+    },
   );
-  const pool = new AsyncConnectionPool(factory, quietConfig({ minSize: 1, maintenanceInterval: 0.01 }));
+  const pool = new AsyncConnectionPool(
+    factory,
+    quietConfig({ minSize: 1, maintenanceInterval: 0.01 }),
+  );
   t.after(() => pool.close().catch(() => {}));
   const openTask = pool.open();
   await delay(0); // let open() reach the gate inside fillToMin
@@ -557,7 +571,12 @@ test("cancel while registering does not leak", async (t) => {
       await proceed.promise;
       return conn;
     },
-    { close: (c) => void (closes.push(c), (c.closed = true)) },
+    {
+      close: (c) => {
+        closes.push(c);
+        c.closed = true;
+      },
+    },
   );
   const pool = new AsyncConnectionPool(factory, quietConfig({ maxSize: 2 }));
   t.after(() => pool.close().catch(() => {}));
@@ -611,7 +630,11 @@ test("connection created during close is destroyed", async (t) => {
       await pool.close();
       return c;
     },
-    { close: (c) => void (c.closed = true) },
+    {
+      close: (c) => {
+        c.closed = true;
+      },
+    },
   );
   pool = new AsyncConnectionPool(factory, quietConfig());
   t.after(() => pool.close().catch(() => {}));
@@ -637,7 +660,11 @@ test("warmup connection destroyed if closed during create", async (t) => {
       await pool.close();
       return c;
     },
-    { close: (c) => void (c.closed = true) },
+    {
+      close: (c) => {
+        c.closed = true;
+      },
+    },
   );
   pool = new AsyncConnectionPool(factory, quietConfig({ minSize: 1 }));
   t.after(() => pool.close().catch(() => {}));
@@ -730,7 +757,9 @@ test("validate_idle closes a healthy connection if the pool closes mid-check", a
         await resume.promise;
         return true;
       },
-      close: (c) => void (c.closed = true),
+      close: (c) => {
+        c.closed = true;
+      },
     }),
     quietConfig({ validateIdle: true, maxSize: 1 }),
     { listeners: [rec] },

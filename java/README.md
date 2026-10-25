@@ -166,7 +166,14 @@ mvn -q -B package           # the library
 mvn test                    # run all tests (JUnit 5)
 ./run_tests.sh              # tests under coverage (gate: 100% line + branch)
 ./run_tests.sh -m          # ...also list any uncovered lines / branches
+./lint.sh                   # SpotBugs:check (gate, High) + Spotless report
+./lint.sh -f                # ...auto-format (spotless:apply)
+./lint.sh -m                # ...also list Medium SpotBugs findings (review-only)
 ```
+
+Linting uses **SpotBugs** (gated at High confidence) + **Spotless** (`googleJavaFormat`, warn-only),
+configured in `pom.xml`. CI runs these as a separate `lint` job. `./lint.sh -m` lists lower-confidence
+findings worth reviewing but not gated.
 
 ## Limits / extension points
 

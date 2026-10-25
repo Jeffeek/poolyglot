@@ -42,8 +42,10 @@ pub trait AsyncConnectionFactory<T>: Send + Sync {
 
 type CreateFn<T> = Box<dyn Fn() -> BoxFuture<'static, Result<T, FactoryError>> + Send + Sync>;
 type ValidateFn<T> = Box<dyn for<'a> Fn(&'a T) -> BoxFuture<'a, bool> + Send + Sync>;
-type ResetFn<T> = Box<dyn for<'a> Fn(&'a T) -> BoxFuture<'a, Result<(), FactoryError>> + Send + Sync>;
-type CloseFn<T> = Box<dyn for<'a> Fn(&'a T) -> BoxFuture<'a, Result<(), FactoryError>> + Send + Sync>;
+type ResetFn<T> =
+    Box<dyn for<'a> Fn(&'a T) -> BoxFuture<'a, Result<(), FactoryError>> + Send + Sync>;
+type CloseFn<T> =
+    Box<dyn for<'a> Fn(&'a T) -> BoxFuture<'a, Result<(), FactoryError>> + Send + Sync>;
 type IsFatalFn = Box<dyn Fn(&(dyn Error + 'static)) -> bool + Send + Sync>;
 
 /// An [`AsyncConnectionFactory`] built from closures returning [`BoxFuture`]s.

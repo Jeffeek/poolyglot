@@ -4,8 +4,8 @@
  * The registry is *lazy*: a pool is built on first use and is **not** `open()`-ed, so it does no
  * background maintenance unless you open it yourself (`registry.pool(key).open()`).
  */
-import { type AsyncConnectionFactory } from "../factories/async-factory.js";
-import { type PoolConfig } from "../policy/config.js";
+import type { AsyncConnectionFactory } from "../factories/async-factory.js";
+import type { PoolConfig } from "../policy/config.js";
 import {
   type AcquireOptions,
   AsyncConnectionPool,

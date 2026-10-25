@@ -154,7 +154,14 @@ dotnet test                                         # 181 tests (net8.0 + net10.
 ./run_tests.sh                                       # tests under coverage (gate: 100% line + branch)
 ./run_tests.sh -m                                    # ...also list any uncovered lines / branches
 dotnet run --project examples                        # runnable SQLite demo
+./lint.sh                                            # Roslyn analyzers as errors (gate) + dotnet format report
+./lint.sh -f                                         # ...auto-format
 ```
+
+Linting uses the **Roslyn analyzers** (`AnalysisLevel=latest-recommended`), gated via
+`dotnet build -warnaserror`; `dotnet format` is warn-only. `.editorconfig` silences a few rules that
+conflict with the cross-language design (e.g. `PoolError` is not renamed to `PoolException`). CI runs
+these as a separate `lint` job.
 
 ## Limits / extension points
 

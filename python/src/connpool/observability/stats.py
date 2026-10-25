@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 from collections import Counter, deque
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any
 
 from connpool.core.connection import CloseReason, PooledConnection
 from connpool.observability.events import PoolListener
@@ -15,7 +15,7 @@ are computed over this same window (bounded memory), so they always describe the
 population."""
 
 
-def percentile(sorted_values: List[float], q: float) -> float:
+def percentile(sorted_values: list[float], q: float) -> float:
     """Linear-interpolated percentile of an already-sorted list. ``q`` in [0, 1]."""
     if not sorted_values:
         return 0.0
@@ -41,7 +41,7 @@ class PoolStats:
     timeouts: int
     closed: int
     leaks: int = 0       # borrowed connections flagged as possibly leaked
-    closed_by_reason: Dict[str, int] = field(default_factory=dict)
+    closed_by_reason: dict[str, int] = field(default_factory=dict)
     # acquire-wait aggregates, all over the last ACQUIRE_WAIT_WINDOW samples
     avg_acquire_wait: float = 0.0
     p50_acquire_wait: float = 0.0
@@ -52,9 +52,9 @@ class PoolStats:
     p50_create_latency: float = 0.0
     p95_create_latency: float = 0.0
     p99_create_latency: float = 0.0
-    breaker_state: Optional[str] = None
+    breaker_state: str | None = None
 
-    def as_dict(self) -> Dict[str, Any]:
+    def as_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
 
 
@@ -63,8 +63,8 @@ class StatsCollector(PoolListener):
         self._lock = threading.Lock()
         self._n: Counter[str] = Counter()
         self._by_reason: Counter[str] = Counter()
-        self._waits: Deque[float] = deque(maxlen=ACQUIRE_WAIT_WINDOW)
-        self._creates: Deque[float] = deque(maxlen=ACQUIRE_WAIT_WINDOW)
+        self._waits: deque[float] = deque(maxlen=ACQUIRE_WAIT_WINDOW)
+        self._creates: deque[float] = deque(maxlen=ACQUIRE_WAIT_WINDOW)
 
     def _inc(self, key: str) -> None:
         with self._lock:

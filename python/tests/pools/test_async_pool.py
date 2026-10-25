@@ -2,9 +2,18 @@ import asyncio
 import unittest
 
 from connpool import (
-    AsyncCallableFactory, AsyncConnectionPool, BreakerConfig, CircuitOpenError, CloseReason,
-    ConnectionCreateError, InvalidReleaseError, ManualClock, PoolClosedError, PoolExhaustedError,
-    PoolTimeoutError, RetryPolicy,
+    AsyncCallableFactory,
+    AsyncConnectionPool,
+    BreakerConfig,
+    CircuitOpenError,
+    CloseReason,
+    ConnectionCreateError,
+    InvalidReleaseError,
+    ManualClock,
+    PoolClosedError,
+    PoolExhaustedError,
+    PoolTimeoutError,
+    RetryPolicy,
 )
 from tests.support.helpers import AsyncFakeFactory, FakeConn, FakeFactory, Recorder, quiet_config
 

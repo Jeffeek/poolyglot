@@ -56,10 +56,10 @@ mod pools;
 mod resilience;
 mod rng;
 
-#[cfg(test)]
-mod test_support;
 #[cfg(all(test, feature = "tokio"))]
 mod async_test_support;
+#[cfg(test)]
+mod test_support;
 
 // ---- public-API facade: one import surface re-exporting the whole library ----
 

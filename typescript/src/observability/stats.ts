@@ -1,6 +1,6 @@
 /** Built-in metrics: a listener that counts events, plus an immutable snapshot. */
-import { type CloseReason, type PooledConnection } from "../core/connection.js";
-import { type PoolListener } from "./events.js";
+import type { CloseReason, PooledConnection } from "../core/connection.js";
+import type { PoolListener } from "./events.js";
 
 /**
  * How many recent acquire-wait / create-latency samples to keep. `avg` and all percentiles are
