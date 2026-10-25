@@ -18,6 +18,25 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
+# On Git Bash / MSYS, /usr/bin/link.exe (GNU coreutils) shadows MSVC's link.exe on PATH, and the
+# CRT/SDK lib dirs (LIB) aren't set, so a from-scratch build of the tokio-feature proc-macro build
+# scripts (the only host binaries that link) fails with LNK1181. Load the MSVC environment so it
+# matches a VS dev shell: import LIB/INCLUDE from vcvars and prepend MSVC's bin (its link.exe wins).
+# (CI is Linux; this whole block is a no-op there. Needs VS Build Tools installed.)
+if [[ "${OSTYPE:-}" == msys* || "${OSTYPE:-}" == cygwin* ]]; then
+  vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+  if [[ -x "$vswhere" ]]; then
+    vsdir=$(cygpath "$("$vswhere" -latest -prerelease -property installationPath | tr -d '\r')")
+    vcvars=$(cygpath -w "$vsdir/VC/Auxiliary/Build/vcvars64.bat")
+    ver=$(tr -d '\r' < "$vsdir/VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt")
+    vcbat=$(mktemp --suffix=.bat)
+    printf '@call "%s" >nul 2>&1\r\n@set\r\n' "$vcvars" > "$vcbat"
+    eval "$(cmd //c "$(cygpath -w "$vcbat")" | sed -e 's/\r$//' -e 's/^\(LIB\|INCLUDE\)=\(.*\)$/export \1="\2"/;t;d')"
+    rm -f "$vcbat"
+    export PATH="$vsdir/VC/Tools/MSVC/$ver/bin/Hostx64/x64:$PATH"
+  fi
+fi
+
 show_missing=false
 [[ "${1:-}" == "-m" ]] && show_missing=true
 
@@ -32,6 +51,7 @@ fi
 
 # 2. human-readable per-file summary (from cached profile).
 echo
+echo "=== coverage (llvm region model — informational; gate is LCOV lines below) ==="
 cargo llvm-cov report --ignore-filename-regex "$ignore" --summary-only
 
 # 3. LCOV for the gate (and for Codecov in CI) (from cached profile).
