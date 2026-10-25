@@ -1,0 +1,40 @@
+name: java
+
+on:
+  push:
+    paths: ["java/**", ".github/workflows/java.yml"]
+  pull_request:
+    paths: ["java/**", ".github/workflows/java.yml"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: java
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - name: Build (library)
+        run: mvn -q -B -DskipTests package
+      - name: Tests + coverage gate (100% line & branch)
+        run: bash run_tests.sh
+
+      # JaCoCo writes jacoco.xml; flag=java keeps it separate from the other languages.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: java/target/site/jacoco/jacoco.xml
+          flags: java
+          name: java
+          fail_ci_if_error: false
