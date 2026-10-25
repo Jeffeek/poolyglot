@@ -1,0 +1,59 @@
+{
+  "name": "@jeffeek/connpool",
+  "version": "1.0.10",
+  "description": "A battle-tested async connection-pool model — slot-reserved sizing, health & rotation, a circuit breaker, backoff retries, and first-class observability. Zero runtime dependencies.",
+  "keywords": [
+    "connection-pool",
+    "pool",
+    "async",
+    "circuit-breaker",
+    "retry",
+    "resource-pool",
+    "backpressure"
+  ],
+  "homepage": "https://github.com/Jeffeek/poolyglot/tree/main/typescript#readme",
+  "bugs": "https://github.com/Jeffeek/poolyglot/issues",
+  "license": "MIT",
+  "author": "Jeffeek",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jeffeek/poolyglot.git",
+    "directory": "typescript"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bash run_tests.sh",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "c8": "^10.1.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
