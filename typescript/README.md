@@ -173,7 +173,7 @@ cancelled acquire never leaks a slot.
 
 ```bash
 npm install                # dev toolchain (tsx, c8, typescript, @types/node)
-npm run build              # emit dist/ — ESM (index.js) + CJS (index.cjs) + .d.ts/.d.cts (tsup)
+npm run build              # emit dist/ — ESM + CJS (tsup); .d.ts (tsc) + .d.cts (mirrored)
 npm run typecheck          # tsc --noEmit over src + test
 bash run_tests.sh          # tests under coverage (gate: 100% line + branch)
 bash run_tests.sh -m       # ...also list any uncovered lines per file
