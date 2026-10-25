@@ -1,0 +1,32 @@
+[package]
+# Published as `connpool-rs` (the crates.io name `connpool` is taken); the library is still
+# imported as `connpool` (see [lib] below), so `use connpool::...` works unchanged.
+name = "connpool-rs"
+version = "1.0.11"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "A battle-tested connection-pool model: slot-reserved sizing, health & rotation rules, a circuit breaker, backoff retries, and first-class observability. The blocking pool is dependency-free (std only); the async pool is behind an optional `tokio` feature (off by default)."
+repository = "https://github.com/Jeffeek/poolyglot"
+homepage = "https://github.com/Jeffeek/poolyglot"
+readme = "README.md"
+keywords = ["connection-pool", "pool", "circuit-breaker", "resilience", "async"]
+categories = ["network-programming", "asynchronous", "concurrency"]
+
+[lib]
+name = "connpool"
+
+[features]
+default = []
+# Enables AsyncConnectionPool / AsyncPoolRegistry (built on tokio). The blocking pool and
+# the whole core model stay dependency-free; only the async pool pulls in tokio.
+tokio = ["dep:tokio"]
+
+[dependencies]
+tokio = { version = "1", optional = true, default-features = false, features = ["rt", "time", "sync", "macros"] }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync", "macros", "test-util"] }
+
+[package.metadata.docs.rs]
+all-features = true

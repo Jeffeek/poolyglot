@@ -55,7 +55,20 @@ npm install @jeffeek/connpool
 import { AsyncConnectionPool } from "@jeffeek/connpool";
 ```
 
-ESM only; requires Node 22 or newer. Zero runtime dependencies.
+Ships **both ESM and CommonJS** (`import` and `require` both work), with TypeScript types for each.
+Requires Node 22 or newer; zero runtime dependencies. Works in Node (ESM or CJS), bundlers
+(Vite/webpack/esbuild/Rollup), and frameworks like Angular/Next — the code uses only web-standard
+globals (`AbortController`, `setTimeout`, `performance`), no Node built-ins.
+
+```ts
+// ESM / TypeScript
+import { AsyncConnectionPool } from "@jeffeek/connpool";
+```
+
+```js
+// CommonJS
+const { AsyncConnectionPool } = require("@jeffeek/connpool");
+```
 
 ## Project layout
 
@@ -160,7 +173,7 @@ cancelled acquire never leaks a slot.
 
 ```bash
 npm install                # dev toolchain (tsx, c8, typescript, @types/node)
-npm run build              # emit dist/ (ESM + .d.ts)
+npm run build              # emit dist/ — ESM (index.js) + CJS (index.cjs) + .d.ts/.d.cts (tsup)
 npm run typecheck          # tsc --noEmit over src + test
 bash run_tests.sh          # tests under coverage (gate: 100% line + branch)
 bash run_tests.sh -m       # ...also list any uncovered lines per file
