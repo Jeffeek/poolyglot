@@ -11,6 +11,7 @@ API-parallel, so switching stacks is a syntax change, not a rewrite.
 [![Java CI](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml)
 [![Go CI](https://github.com/Jeffeek/poolyglot/actions/workflows/go.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/go.yml)
 [![TypeScript CI](https://github.com/Jeffeek/poolyglot/actions/workflows/typescript.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/typescript.yml)
+[![Rust CI](https://github.com/Jeffeek/poolyglot/actions/workflows/rust.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/rust.yml)
 [![codecov](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot)
 [![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE)
 
@@ -39,7 +40,7 @@ except what the factory tells it.
 | **Java** | blocking + async | ✅ stable | [![Maven Central](https://img.shields.io/maven-central/v/io.github.jeffeek/connpool?logo=apachemaven&logoColor=white&label=connpool)](https://central.sonatype.com/artifact/io.github.jeffeek/connpool) | [![java coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=java&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=java) | [`java/`](https://github.com/Jeffeek/poolyglot/tree/main/java) |
 | **Go** | blocking + `context` | ✅ stable | [![Go Reference](https://pkg.go.dev/badge/github.com/Jeffeek/poolyglot/go.svg)](https://pkg.go.dev/github.com/Jeffeek/poolyglot/go) | [![go coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=go&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=go) | [`go/`](https://github.com/Jeffeek/poolyglot/tree/main/go) |
 | **TypeScript** | `async` / Promises | ✅ stable | [![npm](https://img.shields.io/npm/v/%40jeffeek%2Fconnpool?logo=npm&logoColor=white&label=%40jeffeek%2Fconnpool)](https://www.npmjs.com/package/@jeffeek/connpool) | [![typescript coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=typescript&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=typescript) | [`typescript/`](https://github.com/Jeffeek/poolyglot/tree/main/typescript) |
-| Rust | — | 🚧 planned | — | — | `rust/` |
+| **Rust** | blocking + `tokio` | ✅ stable | [![crates.io](https://img.shields.io/crates/v/connpool-rs?logo=rust&logoColor=white&label=connpool-rs)](https://crates.io/crates/connpool-rs) | [![rust coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=rust&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=rust) | [`rust/`](https://github.com/Jeffeek/poolyglot/tree/main/rust) |
 
 Each language lives in its own top-level directory with its own build and tests, but shares one
 `VERSION`, one CHANGELOG per language, and the common behavior spec. CI runs a per-language workflow
@@ -51,6 +52,7 @@ Full per-language docs:
 - **[Java →](https://github.com/Jeffeek/poolyglot/blob/main/java/README.md)**
 - **[Go →](https://github.com/Jeffeek/poolyglot/blob/main/go/README.md)**
 - **[TypeScript →](https://github.com/Jeffeek/poolyglot/blob/main/typescript/README.md)**
+- **[Rust →](https://github.com/Jeffeek/poolyglot/blob/main/rust/README.md)**
 
 ## Shared model
 

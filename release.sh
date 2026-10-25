@@ -32,6 +32,7 @@ CSPROJ="csharp/src/ConnPool/ConnPool.csproj"
 POM="java/pom.xml"
 GODOC="go/doc.go"
 NPMPKG="typescript/package.json"
+CARGO="rust/Cargo.toml"
 
 # 1. clean working tree (nothing modified, staged, or untracked).
 [[ -z "$(git status --porcelain)" ]] || die "working tree not clean — commit or stash first."
@@ -59,6 +60,8 @@ sed -i -E "s|<Version>[^<]*</Version>|<Version>${VERSION}</Version>|" "$CSPROJ"
 sed -i -E "0,/<version>[^<]*<\/version>/s||<version>${VERSION}</version>|" "$POM"
 sed -i -E "s/^const Version = \".*\"/const Version = \"${VERSION}\"/" "$GODOC"
 sed -i -E "0,/\"version\": \"[^\"]*\"/s//\"version\": \"${VERSION}\"/" "$NPMPKG"
+# Only the first `^version = "..."` (the [package] version) matches; dep versions are inline tables.
+sed -i -E "0,/^version = \".*\"/s//version = \"${VERSION}\"/" "$CARGO"
 
 # Guard against a manifest whose line didn't match the expected pattern (silent no-op).
 grep -q "^version = \"${VERSION}\"" "$PYPROJECT" || die "failed to set version in ${PYPROJECT}"
@@ -66,9 +69,10 @@ grep -q "<Version>${VERSION}</Version>" "$CSPROJ" || die "failed to set version 
 grep -q "<version>${VERSION}</version>" "$POM" || die "failed to set version in ${POM}"
 grep -q "^const Version = \"${VERSION}\"" "$GODOC" || die "failed to set version in ${GODOC}"
 grep -q "\"version\": \"${VERSION}\"" "$NPMPKG" || die "failed to set version in ${NPMPKG}"
+grep -q "^version = \"${VERSION}\"" "$CARGO" || die "failed to set version in ${CARGO}"
 
 # 5. show what's about to happen and confirm before anything leaves this machine.
-git add VERSION "$PYPROJECT" "$CSPROJ" "$POM" "$GODOC" "$NPMPKG"
+git add VERSION "$PYPROJECT" "$CSPROJ" "$POM" "$GODOC" "$NPMPKG" "$CARGO"
 git status
 echo
 echo "release:  ${VERSION}"

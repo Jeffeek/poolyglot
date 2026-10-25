@@ -33,6 +33,10 @@ flags:
     paths:
       - typescript/
     carryforward: true
+  rust:
+    paths:
+      - rust/
+    carryforward: true
 
 comment:
   layout: "condensed_header, flags, files"

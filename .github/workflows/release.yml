@@ -401,11 +401,88 @@ jobs:
           name: typescript-dist
           path: typescript/jeffeek-connpool-${{ env.VERSION }}.tgz
 
+  # Rust / crates.io: build -> test -> package -> verify -> publish via crates.io trusted
+  # publishing (OIDC), with a `cargo publish --dry-run` pre-flight. Cloned from the dotnet job.
+  # crates.io trusted publishing needs `id-token: write` and a trusted-publisher policy on
+  # crates.io; no stored CARGO_REGISTRY_TOKEN.
+  rust:
+    runs-on: ubuntu-latest
+    environment:
+      name: crates
+      url: https://crates.io/crates/connpool-rs
+    permissions:
+      contents: read
+      id-token: write          # for crates.io trusted publishing (OIDC)
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85.0"
+          components: llvm-tools-preview
+
+      # The tag is the source of truth; it must agree with the committed VERSION.
+      - name: Check tag matches VERSION
+        working-directory: .
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="$(cat VERSION)"
+          [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # --- verify the committed manifest version matches the tag (release.sh sets it) ---
+      - name: Check Cargo.toml version matches tag
+        run: |
+          CV="$(sed -nE 's/^version = "(.*)"/\1/p' Cargo.toml | head -1)"
+          [ "$CV" = "$VERSION" ] || { echo "Cargo.toml version ${CV} != tag ${VERSION} (run release.sh)"; exit 1; }
+
+      # --- build + test ---
+      - name: Build (blocking + async)
+        run: cargo build --all-features
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Tests + coverage gate
+        run: bash run_tests.sh
+
+      # --- package (version comes from the verified Cargo.toml) ---
+      - name: Package (.crate)
+        run: cargo package --all-features
+
+      # --- verify ---
+      - name: Verify artifact
+        run: |
+          ls -l target/package
+          test -f "target/package/connpool-rs-${VERSION}.crate" || { echo "built crate is not version ${VERSION}"; exit 1; }
+
+      # --- dry run: validate publishing without uploading ---
+      - name: Publish dry run
+        run: cargo publish --dry-run --all-features
+
+      # --- publish: crates.io trusted publishing (OIDC) - exchange the GitHub OIDC token for a
+      #     short-lived crates.io token right before the push; no stored secret ---
+      - name: Authenticate to crates.io (OIDC)
+        uses: rust-lang/crates-io-auth-action@v1
+        id: crates-auth
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+
+      # Hand the packaged crate to the github-release job.
+      - name: Upload artifacts for the GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-dist
+          path: rust/target/package/connpool-rs-${{ env.VERSION }}.crate
+
   # Attach every language's built artifacts to the GitHub Release for this tag, so users get
   # verifiable binaries.
   # Runs only after all publishes succeed; creates the release if it does not exist yet.
   github-release:
-    needs: [python, dotnet, java, go, typescript]
+    needs: [python, dotnet, java, go, typescript, rust]
     runs-on: ubuntu-latest
     permissions:
       contents: write
