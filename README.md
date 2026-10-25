@@ -10,6 +10,7 @@ API-parallel, so switching stacks is a syntax change, not a rewrite.
 [![.NET CI](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml)
 [![Java CI](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml)
 [![Go CI](https://github.com/Jeffeek/poolyglot/actions/workflows/go.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/go.yml)
+[![TypeScript CI](https://github.com/Jeffeek/poolyglot/actions/workflows/typescript.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/typescript.yml)
 [![codecov](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot)
 [![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE)
 
@@ -23,7 +24,7 @@ except what the factory tells it.
 
 - **Pools anything** — one tiny factory interface; the pool stays backend-agnostic.
 - **Identical across languages** — same field names, event names, defaults, and wire values. Learn it once.
-- **Sync *and* async** — thread-based and `async`/`await` twins of the same model, in every language.
+- **Sync *and* async** — thread-based and `async`/`await` twins of the same model (TypeScript is async-only — Node has no blocking acquire).
 - **Resilient by default** — backoff retries + a circuit breaker that counts *one failure per logical creation*.
 - **Observable** — listener hooks plus a stats snapshot with acquire-wait / create-latency percentiles.
 - **Zero runtime dependencies** — standard library only (`connpool` ⇒ stdlib, `ConnPool` ⇒ `netstandard2.1`).
@@ -37,8 +38,8 @@ except what the factory tells it.
 | **C# / .NET** | sync + `async` | ✅ stable | [![NuGet](https://img.shields.io/nuget/v/ConnPool?logo=nuget&logoColor=white&label=ConnPool)](https://www.nuget.org/packages/ConnPool/) | [![csharp coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=csharp&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=csharp) | [`csharp/`](https://github.com/Jeffeek/poolyglot/tree/main/csharp) |
 | **Java** | blocking + async | ✅ stable | [![Maven Central](https://img.shields.io/maven-central/v/io.github.jeffeek/connpool?logo=apachemaven&logoColor=white&label=connpool)](https://central.sonatype.com/artifact/io.github.jeffeek/connpool) | [![java coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=java&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=java) | [`java/`](https://github.com/Jeffeek/poolyglot/tree/main/java) |
 | **Go** | blocking + `context` | ✅ stable | [![Go Reference](https://pkg.go.dev/badge/github.com/Jeffeek/poolyglot/go.svg)](https://pkg.go.dev/github.com/Jeffeek/poolyglot/go) | [![go coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=go&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=go) | [`go/`](https://github.com/Jeffeek/poolyglot/tree/main/go) |
+| **TypeScript** | `async` / Promises | ✅ stable | [![npm](https://img.shields.io/npm/v/%40jeffeek%2Fconnpool?logo=npm&logoColor=white&label=%40jeffeek%2Fconnpool)](https://www.npmjs.com/package/@jeffeek/connpool) | [![typescript coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=typescript&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=typescript) | [`typescript/`](https://github.com/Jeffeek/poolyglot/tree/main/typescript) |
 | Rust | — | 🚧 planned | — | — | `rust/` |
-| TypeScript (Node) | — | 🚧 planned | — | — | `typescript/` |
 
 Each language lives in its own top-level directory with its own build and tests, but shares one
 `VERSION`, one CHANGELOG per language, and the common behavior spec. CI runs a per-language workflow
@@ -49,6 +50,7 @@ Full per-language docs:
 - **[C# / .NET →](https://github.com/Jeffeek/poolyglot/blob/main/csharp/README.md)**
 - **[Java →](https://github.com/Jeffeek/poolyglot/blob/main/java/README.md)**
 - **[Go →](https://github.com/Jeffeek/poolyglot/blob/main/go/README.md)**
+- **[TypeScript →](https://github.com/Jeffeek/poolyglot/blob/main/typescript/README.md)**
 
 ## Shared model
 

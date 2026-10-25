@@ -5,7 +5,7 @@ All notable changes to the .NET implementation are documented here. The format i
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Versions are shared across every
 poolyglot language (one root `VERSION`, one behavior spec).
 
-## [Unreleased]
+## [Released]
 
 ### Added
 
