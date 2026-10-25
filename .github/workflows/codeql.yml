@@ -1,0 +1,67 @@
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "30 2 * * 1" # weekly, Mondays 02:30 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: csharp
+            build-mode: manual
+          - language: java-kotlin # CodeQL's identifier for the JVM family
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Set up JDK 17
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build (csharp)
+        if: matrix.language == 'csharp'
+        run: dotnet build src/ConnPool/ConnPool.csproj -c Release
+        working-directory: csharp
+
+      - name: Build (java)
+        if: matrix.language == 'java-kotlin'
+        run: mvn -q -B -DskipTests package
+        working-directory: java
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
