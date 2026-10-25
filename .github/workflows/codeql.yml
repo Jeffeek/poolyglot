@@ -41,7 +41,7 @@ jobs:
           - language: go
             build-mode: manual
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # --- per-language toolchain (only the compiled languages need one to build) ---
       - name: Set up .NET
