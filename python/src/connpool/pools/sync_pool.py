@@ -12,21 +12,26 @@ import logging
 import random
 import threading
 from collections import deque
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, Deque, Dict, Generic, Iterator, Optional, Sequence, TypeVar
+from typing import Any, Generic, TypeVar
 
-from connpool.policy import lifecycle
-from connpool.core.timeouts import UNSET, Timeout, compute_deadline, remaining
-from connpool.resilience.breaker import CircuitBreaker
 from connpool.core.clock import Clock, SystemClock
-from connpool.policy.config import PoolConfig
 from connpool.core.connection import CloseReason, PooledConnection
 from connpool.core.errors import (
-    ConnectionCreateError, InvalidReleaseError, PoolClosedError, PoolExhaustedError, PoolTimeoutError,
+    ConnectionCreateError,
+    InvalidReleaseError,
+    PoolClosedError,
+    PoolExhaustedError,
+    PoolTimeoutError,
 )
-from connpool.observability.events import ListenerGroup, PoolListener
+from connpool.core.timeouts import UNSET, Timeout, compute_deadline, remaining
 from connpool.factories.sync_factory import CallableFactory, ConnectionFactory
+from connpool.observability.events import ListenerGroup, PoolListener
 from connpool.observability.stats import PoolStats, StatsCollector
+from connpool.policy import lifecycle
+from connpool.policy.config import PoolConfig
+from connpool.resilience.breaker import CircuitBreaker
 
 T = TypeVar("T")
 log = logging.getLogger("connpool")
@@ -43,11 +48,11 @@ class ConnectionPool(Generic[T]):
     def __init__(
         self,
         factory: ConnectionFactory[T],
-        config: Optional[PoolConfig] = None,
+        config: PoolConfig | None = None,
         *,
         listeners: Sequence[PoolListener] = (),
-        clock: Optional[Clock] = None,
-        rng: Optional[random.Random] = None,
+        clock: Clock | None = None,
+        rng: random.Random | None = None,
         name: str = "pool",
     ) -> None:
         self.name = name
@@ -57,33 +62,33 @@ class ConnectionPool(Generic[T]):
         self._rng = rng or random.Random()
 
         self._cond = threading.Condition()
-        self._idle: Deque[PooledConnection[T]] = deque()
-        self._checked_out: Dict[int, PooledConnection[T]] = {}  # id(raw) -> wrapper
+        self._idle: deque[PooledConnection[T]] = deque()
+        self._checked_out: dict[int, PooledConnection[T]] = {}  # id(raw) -> wrapper
         self._size = 0          # idle + checked out + being created/closed
         self._waiters = 0
         self._closed = False
 
         self._stats = StatsCollector()
         self._events = ListenerGroup([self._stats, *listeners])
-        self._breaker: Optional[CircuitBreaker] = (
+        self._breaker: CircuitBreaker | None = (
             CircuitBreaker(self._cfg.breaker, self._clock,
                            on_state_change=lambda o, n: self._events.dispatch("on_breaker_state_change", o, n))
             if self._cfg.breaker else None
         )
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     @classmethod
     def from_callables(
-        cls, create: Callable[[], T], *, close: Optional[Callable[[T], None]] = None,
-        validate: Optional[Callable[[T], bool]] = None, reset: Optional[Callable[[T], None]] = None,
-        config: Optional[PoolConfig] = None, **kwargs: Any,
-    ) -> "ConnectionPool[T]":
+        cls, create: Callable[[], T], *, close: Callable[[T], None] | None = None,
+        validate: Callable[[T], bool] | None = None, reset: Callable[[T], None] | None = None,
+        config: PoolConfig | None = None, **kwargs: Any,
+    ) -> ConnectionPool[T]:
         """Pool anything from plain functions."""
         return cls(CallableFactory(create, close=close, validate=validate, reset=reset), config, **kwargs)
 
     # ------------------------------------------------------------------ lifecycle
-    def open(self) -> "ConnectionPool[T]":
+    def open(self) -> ConnectionPool[T]:
         """Warm up ``min_size`` connections and start the background maintenance thread.
         Optional: without it the pool is purely lazy and does no background work."""
         with self._cond:
@@ -99,7 +104,7 @@ class ConnectionPool(Generic[T]):
             self._thread.start()
         return self
 
-    def close(self, timeout: Optional[float] = None) -> None:
+    def close(self, timeout: float | None = None) -> None:
         """Close idle connections now; checked-out ones are closed when released.
         Blocked ``acquire()`` callers raise ``PoolClosedError``. Idempotent.
 
@@ -129,7 +134,7 @@ class ConnectionPool(Generic[T]):
         for pooled in idle:
             self._destroy(pooled, CloseReason.POOL_CLOSED)
 
-    def __enter__(self) -> "ConnectionPool[T]":
+    def __enter__(self) -> ConnectionPool[T]:
         return self.open()
 
     def __exit__(self, *exc: object) -> None:
@@ -180,7 +185,7 @@ class ConnectionPool(Generic[T]):
         self._events.dispatch("on_acquired", pooled, now - started)
         return pooled.raw
 
-    def release(self, conn: T, *, discard: bool = False, error: Optional[BaseException] = None) -> None:
+    def release(self, conn: T, *, discard: bool = False, error: BaseException | None = None) -> None:
         """Return a connection. ``discard=True`` forces it to be closed instead of reused."""
         with self._cond:
             pooled = self._checked_out.pop(id(conn), None)
@@ -258,7 +263,7 @@ class ConnectionPool(Generic[T]):
             self._events.dispatch("on_connection_leak", pooled, held)
 
     # ----------------------------------------------------------------- internals
-    def _take_idle_or_reserve(self, deadline: Optional[float]) -> Optional[PooledConnection[T]]:
+    def _take_idle_or_reserve(self, deadline: float | None) -> PooledConnection[T] | None:
         """Under the lock: return an idle connection, or reserve a slot (return None), or wait."""
         with self._cond:
             while True:
@@ -284,7 +289,7 @@ class ConnectionPool(Generic[T]):
                 finally:
                     self._waiters -= 1
 
-    def _borrow_reason(self, pooled: PooledConnection[T]) -> Optional[CloseReason]:
+    def _borrow_reason(self, pooled: PooledConnection[T]) -> CloseReason | None:
         now = self._clock.monotonic()
         reason = lifecycle.borrow_reason(pooled, self._cfg, now)
         if reason is None and lifecycle.needs_validation(pooled, self._cfg, now):
@@ -294,8 +299,8 @@ class ConnectionPool(Generic[T]):
 
     def _release_reason(
         self, pooled: PooledConnection[T], conn: T, discard: bool,
-        error: Optional[BaseException], now: float,
-    ) -> Optional[CloseReason]:
+        error: BaseException | None, now: float,
+    ) -> CloseReason | None:
         if discard:
             return CloseReason.DISCARDED
         if error is not None and (self._factory.is_fatal_error(error) or not self._is_healthy(conn)):
@@ -305,7 +310,7 @@ class ConnectionPool(Generic[T]):
             return reason
         try:
             self._factory.reset(conn)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.warning("pool %r: reset failed; discarding %r", self.name, pooled, exc_info=True)
             return CloseReason.RESET_FAILED
         return None
@@ -313,7 +318,7 @@ class ConnectionPool(Generic[T]):
     def _is_healthy(self, raw: T) -> bool:
         try:
             return bool(self._factory.validate(raw))
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.debug("pool %r: validate raised", self.name, exc_info=True)
             return False
 
@@ -327,7 +332,7 @@ class ConnectionPool(Generic[T]):
             self._cond.notify()
             return True
 
-    def _create(self, deadline: Optional[float]) -> tuple[PooledConnection[T], float]:
+    def _create(self, deadline: float | None) -> tuple[PooledConnection[T], float]:
         """Build a connection in an already-reserved slot; frees the slot on failure.
         Returns the connection and how long the factory took (the caller fires
         ``on_connection_created`` once the connection is actually adopted)."""
@@ -367,7 +372,7 @@ class ConnectionPool(Generic[T]):
             self._destroy(pooled, CloseReason.POOL_CLOSED)
             raise PoolClosedError(f"pool {self.name!r} is closed")
 
-    def _create_raw(self, deadline: Optional[float]) -> T:
+    def _create_raw(self, deadline: float | None) -> T:
         """factory.create() wrapped in circuit breaker + retry/backoff.
 
         The breaker sees one logical creation per call: fail-fast when open, and a single
@@ -389,7 +394,7 @@ class ConnectionPool(Generic[T]):
             self._breaker.record_success()
         return raw
 
-    def _create_with_retry(self, deadline: Optional[float]) -> T:
+    def _create_with_retry(self, deadline: float | None) -> T:
         retry, attempt = self._cfg.retry, 0
         while True:
             if self._closed:
@@ -420,7 +425,7 @@ class ConnectionPool(Generic[T]):
     def _destroy(self, pooled: PooledConnection[T], reason: CloseReason) -> None:
         try:
             self._factory.close(pooled.raw)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.warning("pool %r: error closing %r", self.name, pooled, exc_info=True)
         finally:
             with self._cond:
@@ -438,7 +443,7 @@ class ConnectionPool(Generic[T]):
                 self._size += 1
             try:
                 pooled, created_in = self._create(deadline=None)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("pool %r: warm-up failed: %s", self.name, exc)
                 return
             self._events.dispatch("on_connection_created", pooled, created_in)
@@ -450,7 +455,7 @@ class ConnectionPool(Generic[T]):
         while not self._stop.wait(interval):
             try:
                 self.run_maintenance()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 log.exception("pool %r: maintenance pass failed", self.name)
 
     def __repr__(self) -> str:

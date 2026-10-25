@@ -82,6 +82,9 @@ and circuit-breaker states.
 ## Quality bar
 
 - **100% line + branch coverage**, gated in CI for each language (`run_tests.sh`).
+- **Static analysis in CI** — each language has a `lint` job and a `lint.sh` (ruff / Roslyn analyzers /
+  SpotBugs / golangci-lint / Biome / clippy). The gate blocks on bug & dead-code rules; formatting is
+  warn-only. **CodeQL** scans all six languages.
 - Sync and async are **parallel implementations** of one model, with mirrored test suites.
 - Releases are cut from the root `VERSION` and published via **trusted publishing** (OIDC, no stored
   keys) to PyPI and NuGet, with built artifacts attached to each GitHub Release.
@@ -90,7 +93,7 @@ and circuit-breaker states.
 
 Work happens inside the relevant language directory. A behavioral change to one language almost
 always needs the mirror change in the others (and in the "Shared model" section above) — keeping the
-implementations in lock-step is the whole point. See [`CLAUDE.md`](https://github.com/Jeffeek/poolyglot/blob/main/CLAUDE.md) for the repo contract.
+implementations in lock-step is the whole point.
 
 ## License
 

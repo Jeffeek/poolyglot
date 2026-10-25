@@ -70,7 +70,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             let next2 = next2.clone();
             move || Ok::<_, FactoryError>(Arc::new(next2.fetch_add(1, Ordering::SeqCst)))
         }),
-        PoolConfig { max_size: 2, ..Default::default() },
+        PoolConfig {
+            max_size: 2,
+            ..Default::default()
+        },
         Some(connpool::PoolOptions {
             name: Some("demo".into()),
             clock: None,

@@ -2,12 +2,18 @@ name: dotnet
 
 on:
   push:
+    branches: [main]
     paths: ["csharp/**", ".github/workflows/dotnet.yml"]
   pull_request:
     paths: ["csharp/**", ".github/workflows/dotnet.yml"]
 
 permissions:
   contents: read
+
+# A newer commit on the same ref cancels in-flight runs (PRs only; never cancel a main run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -39,3 +45,19 @@ jobs:
           flags: csharp
           name: csharp
           fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Lint gate (Roslyn analyzers as errors)
+        run: dotnet build src/ConnPool/ConnPool.csproj -c Release -warnaserror
+      - name: Format check (warn-only)
+        continue-on-error: true
+        run: dotnet format ConnPool.sln --verify-no-changes

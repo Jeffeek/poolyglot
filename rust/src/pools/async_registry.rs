@@ -119,9 +119,7 @@ mod tests {
     use super::*;
     use crate::async_test_support::*;
 
-    fn registry(
-        h: &AsyncHarness,
-    ) -> AsyncPoolRegistry<String, Conn, AsyncTestFactory> {
+    fn registry(h: &AsyncHarness) -> AsyncPoolRegistry<String, Conn, AsyncTestFactory> {
         let fac = h.fac.clone();
         let rec: Arc<dyn PoolListener<Conn>> = Recorder::new();
         AsyncPoolRegistry::new(

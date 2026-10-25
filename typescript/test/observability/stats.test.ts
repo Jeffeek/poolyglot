@@ -86,7 +86,9 @@ test("StatsCollector counters via hooks and closed_by_reason keyed by wire strin
   c.onAcquireTimeout(1.0);
   c.onConnectionLeak(conn, 5.0);
 
-  const s = c.snapshot(gauges({ maxSize: 3, size: 2, idle: 1, inUse: 1, waiting: 0, breakerState: "closed" }));
+  const s = c.snapshot(
+    gauges({ maxSize: 3, size: 2, idle: 1, inUse: 1, waiting: 0, breakerState: "closed" }),
+  );
 
   assert.equal(s.created, 1);
   assert.equal(s.createFailures, 1);

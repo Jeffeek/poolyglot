@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import inspect
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, Generic, Optional, TypeVar, Union, cast
+from collections.abc import Awaitable, Callable
+from typing import Any, Generic, TypeVar, cast
 
 T = TypeVar("T")
 
 
-async def _maybe_await(value: Union[Any, Awaitable[Any]]) -> Any:
+async def _maybe_await(value: Any | Awaitable[Any]) -> Any:
     return await value if inspect.isawaitable(value) else value
 
 
@@ -40,10 +41,10 @@ class AsyncCallableFactory(AsyncConnectionFactory[T]):
         self,
         create: Callable[[], Any],
         *,
-        close: Optional[Callable[[T], Any]] = None,
-        validate: Optional[Callable[[T], Any]] = None,
-        reset: Optional[Callable[[T], Any]] = None,
-        is_fatal_error: Optional[Callable[[BaseException], bool]] = None,
+        close: Callable[[T], Any] | None = None,
+        validate: Callable[[T], Any] | None = None,
+        reset: Callable[[T], Any] | None = None,
+        is_fatal_error: Callable[[BaseException], bool] | None = None,
     ) -> None:
         self._create, self._close, self._validate = create, close, validate
         self._reset, self._is_fatal = reset, is_fatal_error

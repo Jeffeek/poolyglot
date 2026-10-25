@@ -4,8 +4,8 @@
  * so keep them fast. Exceptions thrown by listeners are swallowed — a broken metrics exporter
  * must never break the pool.
  */
-import { type BreakerState } from "../resilience/breaker.js";
-import { type CloseReason, type PooledConnection } from "../core/connection.js";
+import type { BreakerState } from "../resilience/breaker.js";
+import type { CloseReason, PooledConnection } from "../core/connection.js";
 
 export interface PoolListener {
   onConnectionCreated?(conn: PooledConnection<unknown>, duration: number): void;

@@ -113,21 +113,39 @@ impl PoolStats {
         m.insert("in_use", StatValue::Int(self.in_use as i64));
         m.insert("waiting", StatValue::Int(self.waiting as i64));
         m.insert("created", StatValue::Int(self.created as i64));
-        m.insert("create_failures", StatValue::Int(self.create_failures as i64));
+        m.insert(
+            "create_failures",
+            StatValue::Int(self.create_failures as i64),
+        );
         m.insert("acquired", StatValue::Int(self.acquired as i64));
         m.insert("released", StatValue::Int(self.released as i64));
         m.insert("timeouts", StatValue::Int(self.timeouts as i64));
         m.insert("closed", StatValue::Int(self.closed as i64));
         m.insert("leaks", StatValue::Int(self.leaks as i64));
-        m.insert("closed_by_reason", StatValue::Map(self.closed_by_reason.clone()));
+        m.insert(
+            "closed_by_reason",
+            StatValue::Map(self.closed_by_reason.clone()),
+        );
         m.insert("avg_acquire_wait", StatValue::Float(self.avg_acquire_wait));
         m.insert("p50_acquire_wait", StatValue::Float(self.p50_acquire_wait));
         m.insert("p95_acquire_wait", StatValue::Float(self.p95_acquire_wait));
         m.insert("p99_acquire_wait", StatValue::Float(self.p99_acquire_wait));
-        m.insert("avg_create_latency", StatValue::Float(self.avg_create_latency));
-        m.insert("p50_create_latency", StatValue::Float(self.p50_create_latency));
-        m.insert("p95_create_latency", StatValue::Float(self.p95_create_latency));
-        m.insert("p99_create_latency", StatValue::Float(self.p99_create_latency));
+        m.insert(
+            "avg_create_latency",
+            StatValue::Float(self.avg_create_latency),
+        );
+        m.insert(
+            "p50_create_latency",
+            StatValue::Float(self.p50_create_latency),
+        );
+        m.insert(
+            "p95_create_latency",
+            StatValue::Float(self.p95_create_latency),
+        );
+        m.insert(
+            "p99_create_latency",
+            StatValue::Float(self.p99_create_latency),
+        );
         m.insert(
             "breaker_state",
             match &self.breaker_state {

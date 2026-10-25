@@ -38,11 +38,7 @@ export class BreakerConfig {
     this.halfOpenMaxCalls = options.halfOpenMaxCalls ?? 1;
     this.successThreshold = options.successThreshold ?? 1;
 
-    if (
-      this.failureThreshold < 1 ||
-      this.halfOpenMaxCalls < 1 ||
-      this.successThreshold < 1
-    ) {
+    if (this.failureThreshold < 1 || this.halfOpenMaxCalls < 1 || this.successThreshold < 1) {
       throw new PoolConfigError("breaker thresholds must be >= 1");
     }
     if (this.recoveryTimeout < 0) {

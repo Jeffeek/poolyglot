@@ -4,7 +4,7 @@
  * No locks, no I/O, no clocks of its own — just functions of (connection, config, now).
  */
 import { CloseReason, PooledConnection } from "../core/connection.js";
-import { type Rng } from "../resilience/retry.js";
+import type { Rng } from "../resilience/retry.js";
 import { IdleStrategy, type PoolConfig } from "./config.js";
 
 export function newConnection<T>(

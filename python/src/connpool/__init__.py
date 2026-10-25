@@ -13,18 +13,35 @@ This module is the *public API facade*: everything users need can be imported st
 from ``connpool`` so that internal modules can move without breaking anyone.
 """
 from connpool.core import (
-    CircuitOpenError, Clock, CloseReason, ConnectionCreateError, InvalidReleaseError,
-    ManualClock, PoolClosedError, PoolConfigError, PoolError, PoolExhaustedError,
-    PoolTimeoutError, PooledConnection, SystemClock,
+    CircuitOpenError,
+    Clock,
+    CloseReason,
+    ConnectionCreateError,
+    InvalidReleaseError,
+    ManualClock,
+    PoolClosedError,
+    PoolConfigError,
+    PooledConnection,
+    PoolError,
+    PoolExhaustedError,
+    PoolTimeoutError,
+    SystemClock,
 )
 from connpool.factories import (
-    AsyncCallableFactory, AsyncConnectionFactory, CallableFactory, ConnectionFactory,
+    AsyncCallableFactory,
+    AsyncConnectionFactory,
+    CallableFactory,
+    ConnectionFactory,
 )
 from connpool.observability import PoolListener, PoolStats
 from connpool.policy import IdleStrategy, PoolConfig
 from connpool.pools import AsyncConnectionPool, AsyncPoolRegistry, ConnectionPool, PoolRegistry
 from connpool.resilience import (
-    NO_RETRY, BreakerConfig, BreakerState, CircuitBreaker, RetryPolicy,
+    NO_RETRY,
+    BreakerConfig,
+    BreakerState,
+    CircuitBreaker,
+    RetryPolicy,
 )
 
 __version__ = "1.0.0"

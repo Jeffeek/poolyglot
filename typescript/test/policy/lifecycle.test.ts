@@ -12,12 +12,9 @@ import {
   sweep,
 } from "../../src/policy/lifecycle.js";
 
-function conn(opts: {
-  created?: number;
-  returned?: number | null;
-  uses?: number;
-  expires?: number | null;
-} = {}): PooledConnection<object> {
+function conn(
+  opts: { created?: number; returned?: number | null; uses?: number; expires?: number | null } = {},
+): PooledConnection<object> {
   const { created = 0.0, returned = null, uses = 0, expires = null } = opts;
   const c = new PooledConnection(Object.create(null), created, expires, returned);
   c.useCount = uses;
@@ -82,7 +79,12 @@ test("borrowReason defers to rotation first, then idle", () => {
 
 test("sweep never goes below minSize for idle victims", () => {
   const cfg = new PoolConfig({ minSize: 2, maxIdleTime: 10 });
-  const idle = [conn({ returned: 0 }), conn({ returned: 0 }), conn({ returned: 0 }), conn({ returned: 0 })];
+  const idle = [
+    conn({ returned: 0 }),
+    conn({ returned: 0 }),
+    conn({ returned: 0 }),
+    conn({ returned: 0 }),
+  ];
   const { keep, doomed } = sweep(idle, 4, cfg, 11);
   assert.equal(keep.length, 2);
   assert.equal(doomed.length, 2);

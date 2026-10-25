@@ -39,6 +39,7 @@ dev = [
     "coverage>=7",                     # used by run_tests.sh
     "pytest>=8",                       # optional: `pytest` also works (see [tool.pytest.ini_options])
     "mypy>=1.8",                       # static type checking (the package ships py.typed)
+    "ruff>=0.17",                      # linter + formatter (see [tool.ruff]); lint.sh drives it
 ]
 
 [tool.setuptools.packages.find]
@@ -64,3 +65,18 @@ fail_under = 100
 python_version = "3.11"
 strict = true
 files = ["src"]
+
+[tool.ruff]
+# requires-python (>=3.11) drives the target version automatically.
+line-length = 100
+extend-exclude = ["dist"]
+
+[tool.ruff.lint]
+# The full set `lint.sh` and the warn-only CI step report. The CI *gate* step narrows to
+# the high-signal bug/dead-code rules (--select F,B) so style churn never blocks a build.
+#   F   pyflakes      - undefined names, unused imports/variables (real dead code)
+#   B   bugbear       - likely bugs (mutable defaults, misused loops, etc.)
+#   E,W pycodestyle   - style (warn-only)
+#   I   isort         - import ordering (warn-only)
+#   UP  pyupgrade / SIM flake8-simplify / C4 comprehensions / RUF ruff-native (warn-only)
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "C4", "RUF"]

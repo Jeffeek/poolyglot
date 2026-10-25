@@ -162,7 +162,12 @@ go test ./...              # run all tests
 bash run_tests.sh          # tests under coverage (gate: 100% statements)
 bash run_tests.sh -m       # ...also list any uncovered statements
 (cd examples && go run .)  # runnable demo (separate module)
+bash lint.sh               # golangci-lint (gate) + gofmt report
+bash lint.sh -f            # ...auto-fix (gofmt -w + golangci-lint --fix)
 ```
+
+Linting uses **golangci-lint v2** (`.golangci.yml`: govet, staticcheck, ineffassign, unused, errcheck),
+gated; `gofmt` is warn-only. CI runs these as a separate `lint` job via `golangci/golangci-lint-action`.
 
 ## Limits / extension points
 

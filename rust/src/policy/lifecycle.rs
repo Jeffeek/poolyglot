@@ -146,8 +146,10 @@ mod tests {
 
     #[test]
     fn pop_idle_lifo_and_fifo() {
-        let mut v: Vec<PooledConnection<u32>> =
-            vec![PooledConnection::new(1, 0.0, None), PooledConnection::new(2, 0.0, None)];
+        let mut v: Vec<PooledConnection<u32>> = vec![
+            PooledConnection::new(1, 0.0, None),
+            PooledConnection::new(2, 0.0, None),
+        ];
         assert_eq!(pop_idle(&mut v, IdleStrategy::Lifo).unwrap().raw, 2);
         assert_eq!(pop_idle(&mut v, IdleStrategy::Fifo).unwrap().raw, 1);
         assert!(pop_idle(&mut v, IdleStrategy::Lifo).is_none());

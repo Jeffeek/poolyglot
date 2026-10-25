@@ -2,12 +2,18 @@ name: python
 
 on:
   push:
+    branches: [main]
     paths: ["python/**", ".github/workflows/python.yml"]
   pull_request:
     paths: ["python/**", ".github/workflows/python.yml"]
 
 permissions:
   contents: read
+
+# A newer commit on the same ref cancels in-flight runs (PRs only; never cancel a main run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -49,3 +55,21 @@ jobs:
           flags: python
           name: python
           fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (with dev extras)
+        run: pip install -e ".[dev]"
+      - name: Lint gate (ruff bug / dead-code rules)
+        run: ruff check --select F,B src tests
+      - name: Style + format (warn-only)
+        continue-on-error: true
+        run: |
+          ruff check --output-format=github src tests
+          ruff format --check src tests

@@ -83,7 +83,8 @@ where
             rng: None,
             listeners: self.listeners.clone(),
         };
-        let pool = ConnectionPool::new((self.factory_for)(key), self.config.clone(), Some(options))?;
+        let pool =
+            ConnectionPool::new((self.factory_for)(key), self.config.clone(), Some(options))?;
         g.pools.insert(key.clone(), pool.clone());
         Ok(pool)
     }
@@ -120,7 +121,9 @@ mod tests {
         let fac = h.fac.clone();
         let rec: Arc<dyn PoolListener<Conn>> = Recorder::new();
         PoolRegistry::new(
-            move |_key: &String| Box::new(TestFactory(fac.clone())) as Box<dyn ConnectionFactory<Conn>>,
+            move |_key: &String| {
+                Box::new(TestFactory(fac.clone())) as Box<dyn ConnectionFactory<Conn>>
+            },
             PoolConfig {
                 maintenance_interval: None,
                 breaker: None,

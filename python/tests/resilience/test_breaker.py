@@ -1,6 +1,13 @@
 import unittest
 
-from connpool import BreakerConfig, BreakerState, CircuitBreaker, CircuitOpenError, ManualClock, PoolConfigError
+from connpool import (
+    BreakerConfig,
+    BreakerState,
+    CircuitBreaker,
+    CircuitOpenError,
+    ManualClock,
+    PoolConfigError,
+)
 
 
 class BreakerTests(unittest.TestCase):

@@ -55,7 +55,7 @@ export {
 } from "./factories/async-factory.js";
 
 // --- observability ---
-export { type PoolListener } from "./observability/events.js";
+export type { PoolListener } from "./observability/events.js";
 export { PoolStats } from "./observability/stats.js";
 
 // --- pools ---

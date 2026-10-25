@@ -10,6 +10,12 @@
     <!-- CS1591: don't require XML docs on every public member (code is the doc here). -->
     <NoWarn>$(NoWarn);CS1591</NoWarn>
 
+    <!-- Static analysis: Roslyn analyzers at the recommended bar. They emit warnings on a
+         normal build (non-blocking); the CI `lint` job builds with -warnaserror to gate them.
+         Rule calibration lives in ../../.editorconfig. -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
     <!-- NuGet package metadata (Version is bumped by release.sh and verified against the tag in CI). -->
     <PackageId>ConnPool</PackageId>
     <Version>1.0.11</Version>

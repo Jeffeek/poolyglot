@@ -178,7 +178,14 @@ npm run typecheck          # tsc --noEmit over src + test
 bash run_tests.sh          # tests under coverage (gate: 100% line + branch)
 bash run_tests.sh -m       # ...also list any uncovered lines per file
 npx tsx examples/main.ts   # runnable demo
+npm run lint               # biome lint (gate)      — or: bash lint.sh
+npm run lint:fix           # biome lint --write + reformat  — or: bash lint.sh -f
 ```
+
+Linting & formatting use **Biome** (`biome.json`), not ESLint: `typescript-eslint` does not support
+TypeScript 7 (what this package targets), while Biome has no dependency on the `typescript` package.
+`tsc` still does the type-checking (`npm run typecheck`). `npm run lint` gates on Biome's errors;
+`biome format` (`npm run format:check`) is warn-only. CI runs these as a separate `lint` job.
 
 ## Limits / extension points
 

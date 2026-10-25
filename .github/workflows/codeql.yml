@@ -40,6 +40,8 @@ jobs:
             build-mode: manual
           - language: go
             build-mode: manual
+          - language: rust
+            build-mode: none
     steps:
       - uses: actions/checkout@v7
 

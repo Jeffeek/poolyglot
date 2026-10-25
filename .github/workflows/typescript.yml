@@ -2,12 +2,18 @@ name: typescript
 
 on:
   push:
+    branches: [main]
     paths: ["typescript/**", ".github/workflows/typescript.yml"]
   pull_request:
     paths: ["typescript/**", ".github/workflows/typescript.yml"]
 
 permissions:
   contents: read
+
+# A newer commit on the same ref cancels in-flight runs (PRs only; never cancel a main run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -46,3 +52,19 @@ jobs:
           flags: typescript
           name: typescript
           fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: npm install
+      - name: Lint gate (Biome)
+        run: npm run lint
+      - name: Format check (warn-only)
+        continue-on-error: true
+        run: npm run format:check

@@ -23,9 +23,18 @@ test("default config values", () => {
 });
 
 test("backoff math with zero jitter (floor)", () => {
-  const p = new RetryPolicy({ maxAttempts: 5, baseDelay: 1, maxDelay: 5, multiplier: 2, jitter: 0 });
+  const p = new RetryPolicy({
+    maxAttempts: 5,
+    baseDelay: 1,
+    maxDelay: 5,
+    multiplier: 2,
+    jitter: 0,
+  });
   const rng = () => 0;
-  assert.deepEqual([1, 2, 3, 4].map((n) => p.delayFor(n, rng)), [1, 2, 4, 5]);
+  assert.deepEqual(
+    [1, 2, 3, 4].map((n) => p.delayFor(n, rng)),
+    [1, 2, 4, 5],
+  );
 });
 
 test("backoff math with full jitter stays within bounds", () => {
@@ -38,17 +47,32 @@ test("backoff math with full jitter stays within bounds", () => {
 });
 
 test("backoff with rng at ceiling (jitter=0 is unaffected by rng value)", () => {
-  const p = new RetryPolicy({ maxAttempts: 5, baseDelay: 1, maxDelay: 5, multiplier: 2, jitter: 0 });
+  const p = new RetryPolicy({
+    maxAttempts: 5,
+    baseDelay: 1,
+    maxDelay: 5,
+    multiplier: 2,
+    jitter: 0,
+  });
   const rng = () => 1;
-  assert.deepEqual([1, 2, 3, 4].map((n) => p.delayFor(n, rng)), [1, 2, 4, 5]);
+  assert.deepEqual(
+    [1, 2, 3, 4].map((n) => p.delayFor(n, rng)),
+    [1, 2, 4, 5],
+  );
 });
 
 test("backoff with partial jitter interpolates between floor and ceiling", () => {
   const p = new RetryPolicy({ baseDelay: 4, jitter: 0.5 });
   // ceiling for failedAttempts=1 is min(5, 4*2^0) = 4
   // delay = 4 * (1 - 0.5 + 0.5 * rng())
-  assert.equal(p.delayFor(1, () => 0), 4 * 0.5);
-  assert.equal(p.delayFor(1, () => 1), 4 * 1.0);
+  assert.equal(
+    p.delayFor(1, () => 0),
+    4 * 0.5,
+  );
+  assert.equal(
+    p.delayFor(1, () => 1),
+    4 * 1.0,
+  );
 });
 
 test("retry-on filter narrows retryable errors", () => {
@@ -64,7 +88,13 @@ test("NO_RETRY allows exactly one attempt", () => {
 });
 
 test("replace returns a new validated policy, keeping unset fields", () => {
-  const p = new RetryPolicy({ maxAttempts: 4, baseDelay: 1, maxDelay: 5, multiplier: 2, jitter: 0.5 });
+  const p = new RetryPolicy({
+    maxAttempts: 4,
+    baseDelay: 1,
+    maxDelay: 5,
+    multiplier: 2,
+    jitter: 0.5,
+  });
   const changed = p.replace({ maxAttempts: 10 });
   assert.notEqual(changed, p);
   assert.equal(changed.maxAttempts, 10);

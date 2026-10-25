@@ -2,9 +2,9 @@
 import { AsyncConnectionFactory } from "../../src/factories/async-factory.js";
 import { NO_RETRY } from "../../src/resilience/retry.js";
 import { PoolConfig, type PoolConfigOptions } from "../../src/policy/config.js";
-import { type CloseReason } from "../../src/core/connection.js";
-import { type PoolListener } from "../../src/observability/events.js";
-import { type BreakerState } from "../../src/resilience/breaker.js";
+import type { CloseReason } from "../../src/core/connection.js";
+import type { PoolListener } from "../../src/observability/events.js";
+import type { BreakerState } from "../../src/resilience/breaker.js";
 
 /** Backend errors used by the fakes. */
 export class BackendDown extends Error {}

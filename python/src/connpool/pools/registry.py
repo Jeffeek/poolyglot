@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from collections.abc import AsyncIterator, Callable, Hashable, Iterator
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncIterator, Callable, Dict, Generic, Hashable, Iterator, Optional, TypeVar
+from typing import Generic, TypeVar
 
-from connpool.policy.config import PoolConfig
 from connpool.core.timeouts import UNSET, Timeout
 from connpool.factories.async_factory import AsyncConnectionFactory
 from connpool.factories.sync_factory import ConnectionFactory
+from connpool.policy.config import PoolConfig
 from connpool.pools.async_pool import AsyncConnectionPool
 from connpool.pools.sync_pool import ConnectionPool
 
@@ -28,9 +29,9 @@ class PoolRegistry(Generic[K, T]):
     """
 
     def __init__(self, factory_for: Callable[[K], ConnectionFactory[T]],
-                 config: Optional[PoolConfig] = None, **pool_kwargs: object) -> None:
+                 config: PoolConfig | None = None, **pool_kwargs: object) -> None:
         self._factory_for, self._config, self._kwargs = factory_for, config, pool_kwargs
-        self._pools: Dict[K, ConnectionPool[T]] = {}
+        self._pools: dict[K, ConnectionPool[T]] = {}
         self._lock = threading.Lock()
         self._closed = False
 
@@ -56,7 +57,7 @@ class PoolRegistry(Generic[K, T]):
         for pool in pools:
             pool.close()
 
-    def __enter__(self) -> "PoolRegistry[K, T]":
+    def __enter__(self) -> PoolRegistry[K, T]:
         return self
 
     def __exit__(self, *exc: object) -> None:
@@ -71,9 +72,9 @@ class AsyncPoolRegistry(Generic[K, T]):
     """
 
     def __init__(self, factory_for: Callable[[K], AsyncConnectionFactory[T]],
-                 config: Optional[PoolConfig] = None, **pool_kwargs: object) -> None:
+                 config: PoolConfig | None = None, **pool_kwargs: object) -> None:
         self._factory_for, self._config, self._kwargs = factory_for, config, pool_kwargs
-        self._pools: Dict[K, AsyncConnectionPool[T]] = {}
+        self._pools: dict[K, AsyncConnectionPool[T]] = {}
         self._lock = asyncio.Lock()
         self._closed = False
 
@@ -100,7 +101,7 @@ class AsyncPoolRegistry(Generic[K, T]):
         for pool in pools:
             await pool.close()
 
-    async def __aenter__(self) -> "AsyncPoolRegistry[K, T]":
+    async def __aenter__(self) -> AsyncPoolRegistry[K, T]:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
