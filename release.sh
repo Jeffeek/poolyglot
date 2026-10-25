@@ -21,16 +21,23 @@ IFS='.' read -r MAJOR MINOR _PATCH <<< "$VERSION"
 BRANCH="release/${MAJOR}.${MINOR}.x"
 TAG="v${VERSION}"
 
+# Go modules carry no version in a manifest — the version lives in the git tag, and for a module
+# in a subdirectory that tag must be prefixed with the dir: go/v<version>. We additionally push
+# GOTAG (what the module proxy resolves for github.com/Jeffeek/poolyglot/go).
+GOTAG="go/${TAG}"
+
 # Per-language manifests that carry the version (keep in sync with CI's verify steps).
 PYPROJECT="python/pyproject.toml"
 CSPROJ="csharp/src/ConnPool/ConnPool.csproj"
 POM="java/pom.xml"
+GODOC="go/doc.go"
 
 # 1. clean working tree (nothing modified, staged, or untracked).
 [[ -z "$(git status --porcelain)" ]] || die "working tree not clean — commit or stash first."
 
-# 2. tag must not already exist.
+# 2. tags must not already exist.
 git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null && die "tag ${TAG} already exists."
+git rev-parse -q --verify "refs/tags/${GOTAG}" >/dev/null && die "tag ${GOTAG} already exists."
 
 # 3. make sure we are on the right release branch, offer to create/switch otherwise.
 current="$(git rev-parse --abbrev-ref HEAD)"
@@ -49,14 +56,16 @@ echo "$VERSION" > VERSION
 sed -i -E "s/^version = \".*\"/version = \"${VERSION}\"/" "$PYPROJECT"
 sed -i -E "s|<Version>[^<]*</Version>|<Version>${VERSION}</Version>|" "$CSPROJ"
 sed -i -E "0,/<version>[^<]*<\/version>/s||<version>${VERSION}</version>|" "$POM"
+sed -i -E "s/^const Version = \".*\"/const Version = \"${VERSION}\"/" "$GODOC"
 
 # Guard against a manifest whose line didn't match the expected pattern (silent no-op).
 grep -q "^version = \"${VERSION}\"" "$PYPROJECT" || die "failed to set version in ${PYPROJECT}"
 grep -q "<Version>${VERSION}</Version>" "$CSPROJ" || die "failed to set version in ${CSPROJ}"
 grep -q "<version>${VERSION}</version>" "$POM" || die "failed to set version in ${POM}"
+grep -q "^const Version = \"${VERSION}\"" "$GODOC" || die "failed to set version in ${GODOC}"
 
 # 5. show what's about to happen and confirm before anything leaves this machine.
-git add VERSION "$PYPROJECT" "$CSPROJ" "$POM"
+git add VERSION "$PYPROJECT" "$CSPROJ" "$POM" "$GODOC"
 git status
 echo
 echo "release:  ${VERSION}"
@@ -73,7 +82,9 @@ else
     git commit -m "release: ${TAG}"
 fi
 git tag -a "$TAG" -m "release ${TAG}"    # -a -m => annotated with a message, never opens an editor
+git tag -a "$GOTAG" -m "release ${GOTAG}"  # Go module version tag (go/v<version>)
 git push origin "$BRANCH"
 git push origin "$TAG"
+git push origin "$GOTAG"
 
-echo "pushed ${BRANCH} and ${TAG} — release pipeline will take it from here."
+echo "pushed ${BRANCH}, ${TAG} and ${GOTAG} — release pipeline will take it from here."
