@@ -39,7 +39,7 @@ jobs:
       # run_tests.sh writes coverage/lcov.info; flag=typescript keeps it separate from the others.
       - name: Upload coverage to Codecov
         if: matrix.node-version == '22'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: typescript/coverage/lcov.info

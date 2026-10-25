@@ -31,7 +31,7 @@ jobs:
 
       # JaCoCo writes jacoco.xml; flag=java keeps it separate from the other languages.
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: java/target/site/jacoco/jacoco.xml
