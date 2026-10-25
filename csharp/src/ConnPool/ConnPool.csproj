@@ -12,7 +12,7 @@
 
     <!-- NuGet package metadata (Version is bumped by release.sh and verified against the tag in CI). -->
     <PackageId>ConnPool</PackageId>
-    <Version>1.0.7</Version>
+    <Version>1.0.8</Version>
     <Description>Generic connection pool for .NET (sync + async), dependency-free (netstandard2.1). Pools anything a small factory can create, validate, reset and close: DB drivers, HTTP clients, SSH sessions, sockets.</Description>
     <Authors>Jeffeek</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

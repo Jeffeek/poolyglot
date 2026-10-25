@@ -176,11 +176,109 @@ jobs:
             csharp/dist/*.nupkg
             csharp/dist/*.snupkg
 
+  # Java / Maven: build -> test -> package (jar+sources+javadoc, GPG-signed) -> verify -> publish
+  # to Maven Central via the Central Portal (with a GitHub Packages dry run). Cloned from the dotnet
+  # job. Maven Central has no OIDC/trusted-publishing yet, so this uses a Portal user token.
+  java:
+    runs-on: ubuntu-latest
+    environment:
+      name: maven
+      url: https://central.sonatype.com/artifact/io.github.jeffeek/connpool
+    permissions:
+      contents: read
+      packages: write          # for the GitHub Packages dry run
+    defaults:
+      run:
+        working-directory: java
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      # The tag is the source of truth; it must agree with the committed VERSION.
+      - name: Check tag matches VERSION
+        working-directory: .
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="$(cat VERSION)"
+          [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # --- verify the committed version matches the tag (release.sh sets it) ---
+      - name: Check pom.xml version matches tag
+        run: |
+          PV="$(mvn -q -N help:evaluate -Dexpression=project.version -DforceStdout)"
+          [ "$PV" = "$VERSION" ] || { echo "pom version ${PV} != tag ${VERSION} (run release.sh)"; exit 1; }
+
+      # --- build + test ---
+      - name: Tests + coverage gate (100% line & branch)
+        run: bash run_tests.sh
+
+      # --- settings.xml with both publishing servers + import the signing key ---
+      - name: Configure Maven servers + GPG
+        env:
+          CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          GPG_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings>
+            <servers>
+              <server><id>central</id><username>\${env.CENTRAL_USERNAME}</username><password>\${env.CENTRAL_PASSWORD}</password></server>
+              <server><id>github</id><username>${GITHUB_ACTOR}</username><password>${{ secrets.GITHUB_TOKEN }}</password></server>
+            </servers>
+          </settings>
+          EOF
+          echo "$GPG_KEY" | gpg --batch --import
+
+      # --- package the signed artifacts (version comes from the verified pom) ---
+      - name: Package (jar + sources + javadoc, signed)
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn -q -B -Prelease -DskipTests package
+
+      # --- verify ---
+      - name: Verify artifacts
+        run: |
+          ls -l target
+          ls target | grep -q "connpool-${VERSION}.jar" || { echo "built jar is not version ${VERSION}"; exit 1; }
+
+      # --- dry run: publish to GitHub Packages (pre-flight that the artifacts push cleanly) ---
+      - name: Publish to GitHub Packages
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn -q -B -Prelease -DskipTests deploy
+
+      # --- publish to Maven Central via the Central Portal (token auth; no OIDC yet) ---
+      # CENTRAL_USERNAME/PASSWORD must be present on THIS step: settings.xml resolves the
+      # `central` server creds from ${env.*} when `deploy` runs, not when settings.xml is written.
+      - name: Publish to Maven Central
+        env:
+          CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: mvn -q -B -Prelease,central -DskipTests deploy
+
+      # Hand the built jars to the github-release job.
+      - name: Upload artifacts for the GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-dist
+          path: |
+            java/target/connpool-${{ env.VERSION }}.jar
+            java/target/connpool-${{ env.VERSION }}-sources.jar
+            java/target/connpool-${{ env.VERSION }}-javadoc.jar
+
   # Attach every language's built artifacts to the GitHub Release for this tag, so users get
   # verifiable binaries.
-  # Runs only after both publishes succeed; creates the release if it does not exist yet.
+  # Runs only after all publishes succeed; creates the release if it does not exist yet.
   github-release:
-    needs: [python, dotnet]
+    needs: [python, dotnet, java]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -188,7 +286,7 @@ jobs:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts        # -> artifacts/python-dist/*, artifacts/dotnet-dist/*
+          path: artifacts        # -> artifacts/{python-dist,dotnet-dist,java-dist}/*
 
       - name: Create or update the GitHub Release with artifacts
         env:
