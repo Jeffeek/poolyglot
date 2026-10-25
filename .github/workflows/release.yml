@@ -280,6 +280,9 @@ jobs:
   # matches the committed version, builds, tests, and archives the module source for the Release.
   go:
     runs-on: ubuntu-latest
+    environment:
+      name: go
+      url: https://pkg.go.dev/github.com/Jeffeek/poolyglot/go
     permissions:
       contents: read
     defaults:
