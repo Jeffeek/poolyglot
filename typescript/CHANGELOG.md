@@ -9,7 +9,16 @@ poolyglot language (one root `VERSION`, one behavior spec).
 
 ### Added
 
-- **Initial TypeScript / Node.js implementation** (`@jeffeek/connpool`, ESM, Node 22+, zero runtime
+- **Dual-published as ESM *and* CommonJS** (`import` and `require` both work, with types for each),
+  built via `tsup`. The library still has zero runtime dependencies and uses only web-standard globals,
+  so it also runs in browsers/bundlers (Vite/webpack/Angular).
+- **Deterministic create-timeout classification.** Whether a timed-out `factory.create()` surfaces as
+  `PoolTimeoutError` (acquire-deadline / caller impatience, breaker records an *abort*) vs
+  `ConnectionCreateError` (a `createTimeout` backend fault, breaker records a *failure*) is now decided
+  up front from the config instead of by re-reading the clock after the timer fires — the timer (libuv)
+  and the clock (`performance.now`) are different time sources, so the old post-hoc check was racy at
+  the boundary under load.
+- **Initial TypeScript / Node.js implementation** (`@jeffeek/connpool`, Node 22+, zero runtime
   dependencies) at feature parity with the Python `connpool`, C# `ConnPool`, Java `connpool`, and Go
   `connpool` implementations, and the shared behavior spec:
   - `AsyncConnectionPool<T>` (Promise-based, `AbortSignal` cancellation) built on a hand-rolled
