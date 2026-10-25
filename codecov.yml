@@ -25,6 +25,10 @@ flags:
     paths:
       - java/
     carryforward: true
+  go:
+    paths:
+      - go/
+    carryforward: true
 
 comment:
   layout: "condensed_header, flags, files"
