@@ -9,6 +9,7 @@ API-parallel, so switching stacks is a syntax change, not a rewrite.
 [![Python CI](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/python.yml)
 [![.NET CI](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/dotnet.yml)
 [![Java CI](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/java.yml)
+[![Go CI](https://github.com/Jeffeek/poolyglot/actions/workflows/go.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/go.yml)
 [![codecov](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot)
 [![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE)
 
@@ -35,7 +36,7 @@ except what the factory tells it.
 | **Python** | sync + `asyncio` | ✅ stable | [![PyPI](https://img.shields.io/pypi/v/connpool?logo=pypi&logoColor=white&label=connpool)](https://pypi.org/project/connpool/) | [![python coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=python&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=python) | [`python/`](https://github.com/Jeffeek/poolyglot/tree/main/python) |
 | **C# / .NET** | sync + `async` | ✅ stable | [![NuGet](https://img.shields.io/nuget/v/ConnPool?logo=nuget&logoColor=white&label=ConnPool)](https://www.nuget.org/packages/ConnPool/) | [![csharp coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=csharp&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=csharp) | [`csharp/`](https://github.com/Jeffeek/poolyglot/tree/main/csharp) |
 | **Java** | blocking + async | ✅ stable | [![Maven Central](https://img.shields.io/maven-central/v/io.github.jeffeek/connpool?logo=apachemaven&logoColor=white&label=connpool)](https://central.sonatype.com/artifact/io.github.jeffeek/connpool) | [![java coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=java&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=java) | [`java/`](https://github.com/Jeffeek/poolyglot/tree/main/java) |
-| Go | — | 🚧 planned | — | — | `go/` |
+| **Go** | blocking + `context` | ✅ stable | [![Go Reference](https://pkg.go.dev/badge/github.com/Jeffeek/poolyglot/go.svg)](https://pkg.go.dev/github.com/Jeffeek/poolyglot/go) | [![go coverage](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?flag=go&logo=codecov&label=)](https://app.codecov.io/gh/Jeffeek/poolyglot?flags%5B0%5D=go) | [`go/`](https://github.com/Jeffeek/poolyglot/tree/main/go) |
 | Rust | — | 🚧 planned | — | — | `rust/` |
 | TypeScript (Node) | — | 🚧 planned | — | — | `typescript/` |
 
@@ -43,39 +44,11 @@ Each language lives in its own top-level directory with its own build and tests,
 `VERSION`, one CHANGELOG per language, and the common behavior spec. CI runs a per-language workflow
 scoped to that directory (see [`.github/workflows/`](https://github.com/Jeffeek/poolyglot/tree/main/.github/workflows)).
 
-## Quick start
-
-### Python — `pip install connpool`
-
-```python
-from connpool import ConnectionPool, PoolConfig
-
-pool = ConnectionPool.from_callables(
-    make_conn, validate=is_alive,
-    config=PoolConfig(max_size=20),
-)
-with pool:                        # warm-up + sweeper
-    with pool.connection() as c:  # acquire→use→release
-        c.do_something()
-```
-
-### C# — `dotnet add package ConnPool`
-
-```csharp
-using ConnPool;
-
-var pool = ConnectionPool<MyConn>.FromCallables(
-    MakeConn, validate: IsAlive,
-    config: new PoolConfig { MaxSize = 20 });
-
-using (pool)                      // warm-up + sweeper
-{
-    pool.Open();
-    pool.Use(c => c.DoSomething());  // acquire→use→release
-}
-```
-
-Full per-language docs: **[Python →](https://github.com/Jeffeek/poolyglot/blob/main/python/README.md)** · **[C# / .NET →](https://github.com/Jeffeek/poolyglot/blob/main/csharp/README.md)**
+Full per-language docs:
+- **[Python →](https://github.com/Jeffeek/poolyglot/blob/main/python/README.md)**
+- **[C# / .NET →](https://github.com/Jeffeek/poolyglot/blob/main/csharp/README.md)**
+- **[Java →](https://github.com/Jeffeek/poolyglot/blob/main/java/README.md)**
+- **[Go →](https://github.com/Jeffeek/poolyglot/blob/main/go/README.md)**
 
 ## Shared model
 

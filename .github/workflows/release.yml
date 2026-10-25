@@ -274,11 +274,62 @@ jobs:
             java/target/connpool-${{ env.VERSION }}-sources.jar
             java/target/connpool-${{ env.VERSION }}-javadoc.jar
 
+  # Go / modules: build -> test -> verify. Go has NO registry upload and NO trusted publishing:
+  # a module is "published" purely by its git tag (release.sh pushes go/v<version>, the version
+  # tag the module proxy resolves for github.com/Jeffeek/poolyglot/go). This job verifies the tag
+  # matches the committed version, builds, tests, and archives the module source for the Release.
+  go:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      # The tag is the source of truth; it must agree with the committed VERSION.
+      - name: Check tag matches VERSION
+        working-directory: .
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="$(cat VERSION)"
+          [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # --- verify the committed version constant matches the tag (release.sh sets it) ---
+      - name: Check doc.go Version matches tag
+        run: |
+          GV="$(sed -nE 's/^const Version = "(.*)"/\1/p' doc.go | head -1)"
+          [ "$GV" = "$VERSION" ] || { echo "go Version ${GV} != tag ${VERSION} (run release.sh)"; exit 1; }
+
+      # --- build + test ---
+      - name: Build (library)
+        run: go build ./...
+      - name: Tests + coverage gate (100% statements)
+        run: bash run_tests.sh
+
+      # --- archive the module source (the module itself is published by the go/v<version> git tag) ---
+      - name: Archive module source
+        working-directory: .
+        run: |
+          git archive --format=tar.gz --prefix="connpool-go-${VERSION}/" -o "connpool-go-${VERSION}.tar.gz" HEAD:go
+
+      - name: Upload artifacts for the GitHub Release
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-dist
+          path: connpool-go-${{ env.VERSION }}.tar.gz
+
   # Attach every language's built artifacts to the GitHub Release for this tag, so users get
   # verifiable binaries.
   # Runs only after all publishes succeed; creates the release if it does not exist yet.
   github-release:
-    needs: [python, dotnet, java]
+    needs: [python, dotnet, java, go]
     runs-on: ubuntu-latest
     permissions:
       contents: write
