@@ -14,6 +14,7 @@ API-parallel, so switching stacks is a syntax change, not a rewrite.
 [![Rust CI](https://github.com/Jeffeek/poolyglot/actions/workflows/rust.yml/badge.svg)](https://github.com/Jeffeek/poolyglot/actions/workflows/rust.yml)
 [![codecov](https://img.shields.io/codecov/c/github/Jeffeek/poolyglot?logo=codecov&label=coverage)](https://app.codecov.io/gh/Jeffeek/poolyglot)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Jeffeek/poolyglot/badge)](https://scorecard.dev/viewer/?uri=github.com/Jeffeek/poolyglot)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/5cd3f7932d1149cf93182ecdc1bd790f)](https://app.codacy.com/gh/Jeffeek/poolyglot/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE)
 
 ---
