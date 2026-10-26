@@ -28,9 +28,15 @@ jobs:
         # MSRV (edition 2024 floor) + stable. Keep MSRV first so coverage uploads from it.
         rust: ["1.85.0", "stable"]
     steps:
-      - uses: actions/checkout@v7
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Rust ${{ matrix.rust }}
-        uses: dtolnay/rust-toolchain@master
+        uses: step-security/dtolnay-rust-toolchain@8dd607977d06adf4ed49b190381e74c17a9dd25f # v1.0.0
         with:
           toolchain: ${{ matrix.rust }}
           components: llvm-tools-preview
@@ -39,14 +45,16 @@ jobs:
       - name: Build (with async pool)
         run: cargo build --features tokio
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: step-security/taiki-e-install-action@902be7994b3b54e9eac6fb41c67c1bb0ef9e444b # v2.87.18
+        with:
+          tool: cargo-llvm-cov
       # run_tests.sh runs the suite under --all-features and writes lcov.info (gate: 100% lines).
       - name: Tests + coverage gate (100% lines)
         run: bash run_tests.sh
 
       - name: Upload coverage to Codecov
         if: matrix.rust == '1.85.0'
-        uses: codecov/codecov-action@v7
+        uses: step-security/codecov-action@367bf7e789f1b8e452a759be81c791de8d69b2f6 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: rust/lcov.info
@@ -57,9 +65,15 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: step-security/dtolnay-rust-toolchain@8dd607977d06adf4ed49b190381e74c17a9dd25f # v1.0.0
         with:
           toolchain: stable
           components: clippy, rustfmt
