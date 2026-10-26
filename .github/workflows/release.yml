@@ -72,7 +72,7 @@ jobs:
 
       # --- dry run: publish to TestPyPI first
       - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        uses: step-security/gh-action-pypi-publish@eccc9148d1fa355476d98c01819ec34b75a86f24 # v1.14.2
         with:
           packages-dir: python/dist
           repository-url: https://test.pypi.org/legacy/
@@ -84,7 +84,7 @@ jobs:
 
       # --- publish ---
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        uses: step-security/gh-action-pypi-publish@eccc9148d1fa355476d98c01819ec34b75a86f24 # v1.14.2
         with:
           packages-dir: python/dist
 
@@ -461,7 +461,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        uses: step-security/dtolnay-rust-toolchain@8dd607977d06adf4ed49b190381e74c17a9dd25f # v1.0.0
         with:
           toolchain: "1.85.0"
           components: llvm-tools-preview
@@ -485,7 +485,7 @@ jobs:
       - name: Build (blocking + async)
         run: cargo build --all-features
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@c3076e6fa5aeb9a93daf1bd8eff73345250a8a9c # cargo-llvm-cov
+        uses: step-security/taiki-e-install-action@902be7994b3b54e9eac6fb41c67c1bb0ef9e444b # v2.87.18
       - name: Tests + coverage gate
         run: bash run_tests.sh
 
