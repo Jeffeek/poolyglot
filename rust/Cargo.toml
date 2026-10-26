@@ -2,7 +2,7 @@
 # Published as `connpool-rs` (the crates.io name `connpool` is taken); the library is still
 # imported as `connpool` (see [lib] below), so `use connpool::...` works unchanged.
 name = "connpool-rs"
-version = "1.0.12"
+version = "1.0.13"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
