@@ -495,6 +495,81 @@ jobs:
         with:
           path: artifacts        # -> artifacts/{python-dist,dotnet-dist,java-dist}/*
 
+      # Check out the tagged source so we can independently reproduce (and verify) the
+      # source archives GitHub publishes.
+      - name: Check out source at the tag
+        uses: actions/checkout@v7
+        with:
+          path: src
+
+      # GitHub's auto-generated source archives are unsigned. Pull them in so they get
+      # signed and attached as pinned, verifiable assets alongside the language artifacts.
+      - name: Download source archives
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p artifacts/source
+          REPO="${GITHUB_REPOSITORY##*/}"
+          VERSION="${TAG#v}"          # GitHub strips the leading v in the archive's inner dir
+          curl -fsSL -o "artifacts/source/${REPO}-${VERSION}.tar.gz" \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          curl -fsSL -o "artifacts/source/${REPO}-${VERSION}.zip" \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.zip"
+
+      - name: Install tools (minisign + b2rsum)
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          # Pinned commit (not a moving branch) so a compromised upstream can't alter verification.
+          B2RSUM_SHA=c230d07a49d8c3f047409c077eb5e89de89bd8e6
+          git clone https://github.com/HacKanCuBa/b2rsum /tmp/b2rsum
+          git -C /tmp/b2rsum checkout "$B2RSUM_SHA"
+          sudo make -C /tmp/b2rsum install
+
+      # Cross-check: GitHub's published archives must be byte-identical (file contents) to the
+      # archive we build from the tag ourselves. `git archive` applies the same export rules
+      # GitHub does, so a diff here means tampering, not a .gitattributes false positive.
+      # Verified with recursive BLAKE2 sums (b2rsum) in BOTH directions: every intended file is
+      # present & identical, and the package adds nothing extra. Fails the release on mismatch.
+      - name: Verify source archives against the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY##*/}"
+          VERSION="${TAG#v}"
+          PREFIX="${REPO}-${VERSION}"
+          rm -rf /tmp/ours && mkdir -p /tmp/ours
+          git -C src archive --prefix="${PREFIX}/" --format=tar HEAD | tar -xf - -C /tmp/ours
+          ( cd /tmp/ours && b2rsum --output=/tmp/ours.b2 . )
+          verify() {
+            local dir=/tmp/gh
+            rm -rf "$dir" && mkdir -p "$dir"
+            case "$2" in
+              tar.gz) tar -xzf "$1" -C "$dir" ;;
+              zip)    unzip -q "$1" -d "$dir" ;;
+            esac
+            ( cd "$dir" && b2rsum -c /tmp/ours.b2 )          # every intended file present & identical
+            ( cd "$dir" && b2rsum --output=/tmp/gh.b2 . )
+            ( cd /tmp/ours && b2rsum -c /tmp/gh.b2 )         # package adds nothing extra
+            echo "OK: $1 matches the tagged source"
+          }
+          verify "artifacts/source/${PREFIX}.tar.gz" tar.gz
+          verify "artifacts/source/${PREFIX}.zip" zip
+
+      # Sign every asset (source archives + language artifacts) with a passwordless minisign
+      # key. Generate the key with `minisign -G -W` and store its secret-key file content in
+      # the MINISIGN_SECRET_KEY secret; publish the matching .pub (committed in the repo) so
+      # users can `minisign -Vm <file> -p minisign.pub`.
+      - name: Sign all release assets (minisign)
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > minisign.key
+          while IFS= read -r f; do
+            minisign -S -s minisign.key -m "$f" </dev/null
+          done < <(find artifacts -type f ! -name '*.minisig')
+          rm -f minisign.key
+
       - name: Create or update the GitHub Release with artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
