@@ -486,6 +486,8 @@ jobs:
         run: cargo build --all-features
       - name: Install cargo-llvm-cov
         uses: step-security/taiki-e-install-action@902be7994b3b54e9eac6fb41c67c1bb0ef9e444b # v2.87.18
+        with:
+          tool: cargo-llvm-cov
       - name: Tests + coverage gate
         run: bash run_tests.sh
 
