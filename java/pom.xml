@@ -6,7 +6,7 @@
 
     <groupId>io.github.jeffeek</groupId>
     <artifactId>connpool</artifactId>
-    <version>1.0.12</version>
+    <version>1.0.14</version>
     <packaging>jar</packaging>
 
     <name>connpool</name>
