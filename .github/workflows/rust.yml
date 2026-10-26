@@ -45,7 +45,9 @@ jobs:
       - name: Build (with async pool)
         run: cargo build --features tokio
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: step-security/taiki-e-install-action@902be7994b3b54e9eac6fb41c67c1bb0ef9e444b # v2.87.18
+        with:
+          tool: cargo-llvm-cov
       # run_tests.sh runs the suite under --all-features and writes lcov.info (gate: 100% lines).
       - name: Tests + coverage gate (100% lines)
         run: bash run_tests.sh
