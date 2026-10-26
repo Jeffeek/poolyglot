@@ -22,7 +22,7 @@ package connpool
 
 // Version is the released version of this package. Kept in lock-step with the root
 // VERSION file by release.sh; the module's import version lives in its git tag (go/vX.Y.Z).
-const Version = "1.0.13"
+const Version = "1.0.14"
 
 // Ptr returns a pointer to v. It is a convenience for the optional (*T) fields of
 // PoolConfig — e.g. connpool.Ptr(5.0) for a 5-second timeout, or leaving a field nil for
