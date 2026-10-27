@@ -1,0 +1,8 @@
+---
+# Exclude machine-generated dependency manifests from analysis. These are produced by
+# tooling (npm, uv/pip-compile), not hand-authored, so size/complexity findings on them
+# are noise — e.g. "package-lock.json has N non-comment lines".
+exclude_paths:
+  - "**/package-lock.json"
+  - "python/requirements-dev.txt"
+  - "python/requirements-release.txt"
