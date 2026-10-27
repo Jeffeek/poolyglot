@@ -32,7 +32,11 @@ jobs:
         run: cargo install cargo-fuzz
       - name: Fuzz async_pool_cancel
         working-directory: rust/fuzz
-        run: cargo +nightly fuzz run async_pool_cancel -- -max_total_time=${{ github.event.inputs.fuzz-seconds || '120' }}
+        env:
+          FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
+        run: |
+          case "$FUZZ_SECONDS" in ''|*[!0-9]*) echo "fuzz-seconds must be a positive integer" >&2; exit 1 ;; esac
+          cargo +nightly fuzz run async_pool_cancel -- -max_total_time="$FUZZ_SECONDS"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:

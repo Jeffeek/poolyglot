@@ -39,8 +39,11 @@ jobs:
 
       - name: Fuzz the async pool harness
         working-directory: python
+        env:
+          FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
         run: |
-          python fuzz/fuzz_async_pool.py -max_total_time=${{ github.event.inputs.fuzz-seconds || '120' }}
+          case "$FUZZ_SECONDS" in ''|*[!0-9]*) echo "fuzz-seconds must be a positive integer" >&2; exit 1 ;; esac
+          python fuzz/fuzz_async_pool.py -max_total_time="$FUZZ_SECONDS"
 
       - name: Upload crash + corpus artifacts
         if: failure()

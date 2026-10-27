@@ -50,11 +50,13 @@ function mulberry32(seed: number): () => number {
 }
 
 function withWatchdog<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(`watchdog: ${label} did not settle in ${ms}ms`)), ms);
   });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(timer!));
+  return Promise.race([p, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
 }
 
 let unhandled: unknown[] = [];

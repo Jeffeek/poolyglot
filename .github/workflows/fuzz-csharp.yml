@@ -49,11 +49,14 @@ jobs:
         run: sharpfuzz csharp/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.dll
 
       - name: Fuzz
+        env:
+          FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
         run: |
+          case "$FUZZ_SECONDS" in ''|*[!0-9]*) echo "fuzz-seconds must be a positive integer" >&2; exit 1 ;; esac
           mkdir -p csharp/fuzz/corpus
           dotnet csharp/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.Fuzz.dll \
             csharp/fuzz/corpus \
-            -max_total_time=${{ github.event.inputs.fuzz-seconds || '120' }}
+            -max_total_time="$FUZZ_SECONDS"
 
       - name: Upload crashes + corpus
         if: failure()

@@ -145,10 +145,15 @@ async def run_op_sequence(ops: list[int]) -> None:
 
 
 def _check_invariants(pool: AsyncConnectionPool, factory: _FakeAsyncFactory) -> None:
+    # Raise explicitly rather than `assert`: the fuzzer must catch violations even under
+    # `python -O`, which strips assert statements.
     cond = pool._cond  # noqa: SLF001 - intentional white-box check, fuzz-only code
-    assert len(cond._waiters) == 0, "Condition waiter set did not empty at rest"  # noqa: SLF001
+    if len(cond._waiters) != 0:  # noqa: SLF001
+        raise AssertionError("Condition waiter set did not empty at rest")
     s = pool.stats()
-    assert s.idle + s.in_use == s.size, f"slot accounting leak: idle={s.idle} in_use={s.in_use} size={s.size}"
-    assert factory.created - factory.closed == s.size, (
-        f"created/closed mismatch: created={factory.created} closed={factory.closed} size={s.size}"
-    )
+    if s.idle + s.in_use != s.size:
+        raise AssertionError(f"slot accounting leak: idle={s.idle} in_use={s.in_use} size={s.size}")
+    if factory.created - factory.closed != s.size:
+        raise AssertionError(
+            f"created/closed mismatch: created={factory.created} closed={factory.closed} size={s.size}"
+        )

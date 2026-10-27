@@ -12,7 +12,7 @@ import logging
 import random
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any, Generic, TypeVar
 
 from connpool.core.clock import Clock, SystemClock
@@ -70,8 +70,10 @@ class AsyncConnectionPool(Generic[T]):
         self._stats = StatsCollector()
         self._events = ListenerGroup([self._stats, *listeners])
         self._breaker: CircuitBreaker | None = (
-            CircuitBreaker(self._cfg.breaker, self._clock,
-                           on_state_change=lambda o, n: self._events.dispatch("on_breaker_state_change", o, n))
+            CircuitBreaker(
+                self._cfg.breaker, self._clock,
+                on_state_change=lambda o, n: self._events.dispatch("on_breaker_state_change", o, n),
+            )
             if self._cfg.breaker else None
         )
         self._task: asyncio.Task[None] | None = None
@@ -83,7 +85,9 @@ class AsyncConnectionPool(Generic[T]):
         validate: Callable[[T], Any] | None = None, reset: Callable[[T], Any] | None = None,
         config: PoolConfig | None = None, **kwargs: Any,
     ) -> AsyncConnectionPool[T]:
-        return cls(AsyncCallableFactory(create, close=close, validate=validate, reset=reset), config, **kwargs)
+        return cls(
+            AsyncCallableFactory(create, close=close, validate=validate, reset=reset), config, **kwargs,
+        )
 
     # ------------------------------------------------------------------ lifecycle
     async def open(self) -> AsyncConnectionPool[T]:
@@ -127,10 +131,8 @@ class AsyncConnectionPool(Generic[T]):
                         break
         if self._task is not None:
             self._task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
         for pooled in idle:
             await self._destroy(pooled, CloseReason.POOL_CLOSED)
 
@@ -372,10 +374,9 @@ class AsyncConnectionPool(Generic[T]):
             # acquire()'s `except BaseException` branch, which doesn't know cleanup already
             # happened and would destroy this connection via _destroy() even though its real
             # owner still holds it (double size-- and a foreign-owned close()).
-            try:
+            # slot already freed; report the real reason below
+            with suppress(asyncio.CancelledError):
                 await self._free_slot()
-            except asyncio.CancelledError:
-                pass  # slot already freed; report the real reason below
             raise ConnectionCreateError(
                 f"pool {self.name!r}: factory.create() returned an object the pool already manages; "
                 "each create() must return a distinct connection")
@@ -389,10 +390,9 @@ class AsyncConnectionPool(Generic[T]):
             # acquire()'s `except BaseException` branch, which doesn't know cleanup already
             # happened and would destroy the already-disposed connection again (double free:
             # size decremented twice, factory.close() called twice).
-            try:
+            # disposal already completed (shielded); report the real reason below
+            with suppress(asyncio.CancelledError):
                 await self._destroy(pooled, CloseReason.POOL_CLOSED)
-            except asyncio.CancelledError:
-                pass  # disposal already completed (shielded); report the real reason below
             raise PoolClosedError(f"pool {self.name!r} is closed")
 
     async def _create_raw(self, deadline: float | None) -> T:
