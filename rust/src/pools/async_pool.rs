@@ -1470,11 +1470,8 @@ mod tests {
             // `size` is a `usize`: a double-decrement past zero panics on underflow in debug and
             // wraps to a huge value in release — either way this bounds check (plus the lack of a
             // panic) proves it was decremented at most once.
-            assert!(
-                p.stats().size <= 1,
-                "pool size must never be double-decremented, got {}",
-                p.stats().size
-            );
+            let size = p.stats().size;
+            assert!(size <= 1, "pool size must never be double-decremented, got {size}");
         }
     }
 
