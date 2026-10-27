@@ -1,0 +1,32 @@
+[package]
+# cargo-fuzz (libFuzzer bridge) harness for the divergent async primitives: tokio::sync::Notify
+# waiter coordination plus the Drop-guard cancellation path (SlotGuard/BorrowGuard in
+# src/pools/async_pool.rs), exercised through the public AsyncConnectionPool<T> surface.
+#
+# Deliberately NOT a workspace member of ../Cargo.toml (not listed anywhere there, not
+# referenced by path from the root crate) so `cargo llvm-cov`/`cargo clippy` invoked from
+# rust/ (run_tests.sh, lint.sh) never build or measure it, and it never affects the 100%
+# coverage gate or the zero-runtime-deps library. See README.md for manual run steps.
+name = "connpool-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tokio = { version = "1", default-features = false, features = ["rt", "time", "sync", "macros"] }
+
+[dependencies.connpool]
+path = ".."
+package = "connpool-rs"
+features = ["tokio"]
+
+[[bin]]
+name = "async_pool_cancel"
+path = "fuzz_targets/async_pool_cancel.rs"
+test = false
+doc = false
+bench = false

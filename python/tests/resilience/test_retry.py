@@ -1,3 +1,4 @@
+import math
 import random
 import unittest
 
@@ -16,6 +17,14 @@ class RetryPolicyTests(unittest.TestCase):
         self.assertEqual([p.delay_for(n, rng) for n in (1, 2, 3, 4)], [1, 2, 4, 5])
         full = RetryPolicy(base_delay=4, jitter=1.0)
         self.assertTrue(all(0 <= full.delay_for(1, rng) <= 4 for _ in range(100)))
+
+    def test_zero_base_delay_no_nan(self):
+        p = RetryPolicy(base_delay=0, multiplier=2, jitter=0.5)
+        rng = random.Random(0)
+        for n in (1, 2, 100, 1000):
+            d = p.delay_for(n, rng)
+            self.assertTrue(math.isfinite(d))
+            self.assertEqual(d, 0.0)
 
     def test_retry_on_filter(self):
         p = RetryPolicy(retry_on=(ConnectionError,))

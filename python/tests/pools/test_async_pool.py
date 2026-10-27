@@ -243,6 +243,80 @@ class AsyncPoolTests(unittest.IsolatedAsyncioTestCase):
         await pool.close()
         self.assertEqual(len(closed), 1)
 
+    async def test_cancel_after_duplicate_free_slot_does_not_double_free(self):
+        # A CancelledError redelivered right after _free_slot() returns (but before the
+        # ConnectionCreateError raise) must not reach acquire()'s catch-all and destroy the
+        # duplicate connection: its real owner still holds it, and the slot must be freed
+        # exactly once.
+        shared = object()
+        closed = []
+        factory = AsyncCallableFactory(lambda: shared, close=closed.append)
+        rec = Recorder()
+        pool = AsyncConnectionPool(factory, quiet_config(max_size=2), listeners=[rec])
+        self.addAsyncCleanup(pool.close)
+
+        first = await pool.acquire()                   # real owner of `shared`
+
+        gate, released = asyncio.Event(), asyncio.Event()
+        orig_free_slot = pool._free_slot
+
+        async def gated_free_slot():
+            await orig_free_slot()
+            released.set()
+            await gate.wait()                           # hold here so the test can cancel now
+
+        pool._free_slot = gated_free_slot               # type: ignore[method-assign]
+
+        task = asyncio.create_task(pool.acquire())
+        await released.wait()                            # _free_slot has already returned
+        task.cancel()                                     # redeliver CancelledError right here
+        gate.set()
+        with self.assertRaises((ConnectionCreateError, asyncio.CancelledError)):
+            await task
+
+        self.assertEqual(closed, [])                     # duplicate never closed (owner holds it)
+        self.assertEqual(pool.stats().size, 1)            # slot freed exactly once
+        self.assertEqual(rec.closed, [])                  # no spurious close event
+        await pool.release(first)
+
+    async def test_cancel_after_closed_destroy_does_not_double_free(self):
+        # Mirror of the duplicate-path test for the closed path: a CancelledError redelivered
+        # right after the shielded _destroy() completes (but before PoolClosedError is raised)
+        # must not reach acquire()'s catch-all and destroy the connection a second time.
+        closed = []
+        create_gate = asyncio.Event()
+
+        async def slow_create():
+            await create_gate.wait()                      # suspend so close() can land first
+            return object()
+
+        factory = AsyncCallableFactory(slow_create, close=closed.append)
+        rec = Recorder()
+        pool = AsyncConnectionPool(factory, quiet_config(max_size=2), listeners=[rec])
+
+        gate, destroyed = asyncio.Event(), asyncio.Event()
+        orig_destroy = pool._destroy
+
+        async def gated_destroy(pooled, reason):
+            await orig_destroy(pooled, reason)
+            destroyed.set()
+            await gate.wait()                            # hold here so the test can cancel now
+
+        pool._destroy = gated_destroy                    # type: ignore[method-assign]
+
+        task = asyncio.create_task(pool.acquire())
+        await asyncio.sleep(0)                            # let acquire suspend inside create()
+        await pool.close()                                # closes the pool mid-creation
+        create_gate.set()                                 # create() finishes -> register-new sees "closed"
+        await destroyed.wait()                            # shielded _destroy has already completed
+        task.cancel()                                      # redeliver CancelledError right here
+        gate.set()
+        with self.assertRaises((PoolClosedError, asyncio.CancelledError)):
+            await task
+
+        self.assertEqual(len(closed), 1)                 # factory.close() called exactly once
+        self.assertEqual(rec.closed, [CloseReason.POOL_CLOSED])
+
     async def test_duplicate_connection_from_factory_is_rejected(self):
         shared = object()
         pool = AsyncConnectionPool.from_callables(lambda: shared, config=quiet_config())

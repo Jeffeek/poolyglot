@@ -1014,4 +1014,100 @@ class AsyncPoolTest {
     gate.countDown();
     assertThrowsExactly(ConnectionCreateError.class, () -> await(task));
   }
+
+  // registerNew's cleanup (freeSlot/destroy) runs as plain synchronous Java - lock/unlock,
+  // decrement, close-via-uncancellable-join - with no CancelToken check point inside it. The only
+  // checkpoint on the create path is inside createWithRetry's AsyncAwait.await, which is checked
+  // eagerly the instant factory.createAsync() resolves - strictly before create()/registerNew()
+  // ever run. So a token that goes hot exactly then is always absorbed by create()'s own single
+  // freeSlot() guard (no PooledConnection even exists yet); it can never reach registerNew() and
+  // race its "duplicate"/"closed" cleanup. These tests fire the token at that exact instant and
+  // prove there is still only ever one free/dispose - documenting that Java's cooperative,
+  // checkpoint-based CancelToken model structurally cannot redeliver a cancellation mid-cleanup
+  // the way asyncio's CancelledError can in the Python port.
+  @Test
+  void cancelRacingDuplicateRegistrationNeverDoubleFrees() throws Exception {
+    FakeConn shared = new FakeConn();
+    AtomicReference<CancelTokenSource> ctsRef = new AtomicReference<>();
+    AtomicInteger creates = new AtomicInteger();
+    AsyncConnectionFactory<FakeConn> f =
+        new AsyncConnectionFactory<>() {
+          @Override
+          public CompletableFuture<FakeConn> createAsync(CancelToken t) {
+            if (creates.incrementAndGet() > 1) {
+              ctsRef.get().cancel();
+            }
+            return CompletableFuture.completedFuture(shared);
+          }
+
+          @Override
+          public CompletableFuture<Void> closeAsync(FakeConn c, CancelToken t) {
+            c.closed = true;
+            return DONE;
+          }
+        };
+    AsyncConnectionPool<FakeConn> pool = make(f, null, TestSupport.quiet().maxSize(2).build());
+    FakeConn first = await(pool.acquireAsync());
+
+    CancelTokenSource cts = new CancelTokenSource();
+    ctsRef.set(cts);
+    try {
+      assertThrowsExactly(
+          CancellationException.class,
+          () -> await(pool.acquireAsync(Timeout.unset(), cts.token())));
+    } finally {
+      cts.close();
+    }
+
+    // create()'s own cancellation checkpoint absorbs the hot token before registerNew() runs -
+    // freeSlot() still ran exactly once for the rejected second connection (size back to 1, just
+    // `first`), and the shared connection was never closed (its real owner, `first`, still holds
+    // it) - confirming there is no window where registerNew()'s "duplicate" cleanup can race a
+    // redelivered cancellation.
+    assertEquals(1, pool.stats().size());
+    assertFalse(
+        shared.closed); // real owner (first) still holds it - duplicate path never closes it
+    await(pool.releaseAsync(first));
+  }
+
+  @Test
+  void cancelRacingClosedRegistrationNeverDoubleFrees() throws Exception {
+    AtomicReference<CancelTokenSource> ctsRef = new AtomicReference<>();
+    AtomicReference<AsyncConnectionPool<FakeConn>> poolRef = new AtomicReference<>();
+    AsyncConnectionFactory<FakeConn> f =
+        new AsyncConnectionFactory<>() {
+          @Override
+          public CompletableFuture<FakeConn> createAsync(CancelToken t) {
+            await(poolRef.get().closeAsync());
+            ctsRef.get().cancel();
+            return CompletableFuture.completedFuture(new FakeConn());
+          }
+
+          @Override
+          public CompletableFuture<Void> closeAsync(FakeConn c, CancelToken t) {
+            c.closed = true;
+            return DONE;
+          }
+        };
+    AsyncConnectionPool<FakeConn> pool = make(f, null, TestSupport.quiet().maxSize(2).build());
+    poolRef.set(pool);
+
+    CancelTokenSource cts = new CancelTokenSource();
+    ctsRef.set(cts);
+    try {
+      assertThrowsExactly(
+          CancellationException.class,
+          () -> await(pool.acquireAsync(Timeout.unset(), cts.token())));
+    } finally {
+      cts.close();
+    }
+
+    // create()'s own cancellation checkpoint (AsyncAwait.await, checked the instant createAsync()
+    // resolves) absorbs the hot token before registerNew() ever runs - so no PooledConnection was
+    // ever registered/destroyed here. freeSlot() still ran exactly once (size back to 0), and no
+    // onConnectionClosed fired for a connection that was never tracked - confirming there is no
+    // window where registerNew()'s "closed" cleanup can race a redelivered cancellation.
+    assertEquals(0, pool.stats().size());
+    assertEquals(0, rec.closedSnapshot().size());
+  }
 }

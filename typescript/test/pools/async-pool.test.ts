@@ -606,6 +606,86 @@ test("cancel while registering does not leak", async (t) => {
   });
 });
 
+// Architect invariant (ported from the Python async-pool double-free investigation): once
+// registerNew's cleanup for the "duplicate" or "closed" path has started, an abort landing
+// during that cleanup must never cause a second disposal of the connection (no double
+// factory.close(), no double size--), and a duplicate's real owner must never have its
+// connection closed by the pool. Unlike Python's `asyncio.CancelledError` (which the event loop
+// can redeliver into a coroutine at its very next resumption, even right after an awaited
+// cleanup call returns), `AbortSignal`-based cancellation here is only ever observed at an await
+// that was explicitly handed the `signal`. Neither `freeSlot()` nor the closed-path `destroy()`
+// call in `registerNew` is passed `signal`, so an abort firing during/after that cleanup cannot
+// reject it or redirect the error that follows.
+test("abort during duplicate-path cleanup cannot cause a double-free", async (t) => {
+  const shared = new FakeConn();
+  const closes: FakeConn[] = [];
+  const ctrl = new AbortController();
+  const factory = new AsyncCallableFactory<FakeConn>(async () => shared, {
+    close: (c) => {
+      closes.push(c);
+      c.closed = true;
+    },
+  });
+  const pool = new AsyncConnectionPool(factory, quietConfig({ maxSize: 2 }));
+  t.after(() => pool.close().catch(() => {}));
+
+  const first = await pool.acquire(); // shared is now checked out
+  assert.equal(first, shared); // sanity: acquired the shared raw connection
+
+  // registerNew will see `shared` already tracked -> action = "duplicate" -> freeSlot() then throw.
+  // Fire the abort as a macrotask (setTimeout 0) so it lands *after* create() has resolved and
+  // control is already inside registerNew's duplicate-path cleanup, not during factory.create()
+  // itself. freeSlot() never observes `signal`, so this cannot preempt the cleanup.
+  setTimeout(() => ctrl.abort(), 0);
+  const task = pool.acquire({ signal: ctrl.signal });
+  await assert.rejects(task, ConnectionCreateError);
+
+  assert.equal(closes.length, 0); // the shared connection was never closed (its owner still holds it)
+  assert.equal(pool.stats().size, 1); // only the first (real) connection counted; duplicate slot freed
+  assert.equal(pool.stats().created, 1);
+
+  await pool.release(first);
+});
+
+test("abort during closed-path cleanup cannot cause a double-free", async (t) => {
+  const closes: FakeConn[] = [];
+  const built = deferred();
+  const proceed = deferred();
+  const ctrl = new AbortController();
+  const factory = new AsyncCallableFactory<FakeConn>(
+    async () => {
+      const conn = new FakeConn();
+      built.resolve();
+      await proceed.promise;
+      return conn;
+    },
+    {
+      close: (c) => {
+        closes.push(c);
+        c.closed = true;
+      },
+    },
+  );
+  const pool = new AsyncConnectionPool(factory, quietConfig({ maxSize: 2 }));
+  t.after(() => pool.close().catch(() => {}));
+
+  const task = pool.acquire({ signal: ctrl.signal });
+  await built.promise; // create() is in flight; slot reserved
+  await pool.close(); // registerNew will observe `_closed === true` -> action = "closed"
+  // Fire the abort as a macrotask so it lands after create() resolves and control is already
+  // inside registerNew's closed-path cleanup (destroy(), which is never given `signal`).
+  setTimeout(() => ctrl.abort(), 0);
+  proceed.resolve(); // create() returns; registerNew runs destroy() unguarded by `signal`
+
+  await assert.rejects(task, PoolClosedError); // never surfaces as a CancelledError/AbortError
+
+  for (let i = 0; i < 100; i++) {
+    if (closes.length === 1) break;
+    await delay(0.001);
+  }
+  assert.equal(closes.length, 1); // closed exactly once, not twice
+});
+
 test("pool closed mid-retry surfaces PoolClosedError", async (t) => {
   let pool!: AsyncConnectionPool<FakeConn>;
   const factory = new AsyncCallableFactory<FakeConn>(async () => {

@@ -82,7 +82,7 @@ namespace ConnPool
         /// <summary>Delay before the next attempt, given how many attempts have failed so far.</summary>
         public double DelayFor(int failedAttempts, Random rng)
         {
-            double ceiling = Math.Min(_maxDelay, _baseDelay * Math.Pow(_multiplier, failedAttempts - 1));
+            double ceiling = _baseDelay == 0.0 ? 0.0 : Math.Min(_maxDelay, _baseDelay * Math.Pow(_multiplier, failedAttempts - 1));
             return ceiling * (1.0 - _jitter + _jitter * rng.NextDouble());
         }
 

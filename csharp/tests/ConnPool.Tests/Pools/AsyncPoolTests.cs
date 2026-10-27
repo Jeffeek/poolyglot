@@ -674,6 +674,77 @@ namespace ConnPool.Tests.Pools
         }
 
         [Fact]
+        public async Task ShieldedDestroyRaceNeverDoubleDestroysOnPoolClosed()
+        {
+            // Regression test for the closed-path double-free: AsyncUtil.AwaitShielded's internal
+            // Task.WhenAny(work, cancelSignal) can pick the cancellation branch even though `work`
+            // (the shielded factory.CloseAsync + bookkeeping) has *already run to completion*, if the
+            // two complete concurrently on different threads (proven racy: see AwaitShielded's own
+            // behaviour under concurrent completion/cancel). When that happens inside RegisterNewAsync's
+            // "closed" path, a redelivered OperationCanceledException must not escape to Acquire's
+            // catch-all and Destroy() the same connection a second time.
+            const int iterations = 200; // bounded, deterministic-enough to reliably hit the window
+
+            for (int i = 0; i < iterations; i++)
+            {
+                var closeGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var closeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var closes = new List<FakeConn>();
+                AsyncConnectionPool<FakeConn> pool = null!;
+
+                // Close the pool from inside create(), after the connection is built but before
+                // RegisterNewAsync's lock-check runs - the same technique as
+                // ConnectionCreatedDuringCloseIsDestroyed, so RegisterNewAsync reliably observes
+                // "closed" and goes through the Destroy(..., PoolClosed) + guarded-throw path.
+                Func<CancellationToken, Task<FakeConn>> create = async ct =>
+                {
+                    var conn = new FakeConn();
+                    await pool.CloseAsync().ConfigureAwait(false);
+                    return conn;
+                };
+                Func<FakeConn, CancellationToken, Task> closer = async (conn, _) =>
+                {
+                    closeStarted.TrySetResult(true);
+                    await closeGate.Task.ConfigureAwait(false); // released concurrently with Cancel()
+                    lock (closes) closes.Add(conn);
+                    conn.Closed = true;
+                };
+
+                pool = new AsyncConnectionPool<FakeConn>(
+                    new AsyncCallableFactory<FakeConn>(create, close: closer), Helpers.QuietConfig());
+
+                var cts = new CancellationTokenSource();
+                Task<FakeConn> acquire = pool.AcquireAsync(cancellationToken: cts.Token);
+                await closeStarted.Task; // the shielded Dispose() is now awaiting factory.CloseAsync()
+
+                // Race factory.CloseAsync() finishing against the external cancellation, matching
+                // AwaitShielded's real concurrent-completion window.
+                var t1 = Task.Run(() => closeGate.TrySetResult(true));
+                var t2 = Task.Run(() => cts.Cancel());
+                await Task.WhenAll(t1, t2);
+
+                Exception observed;
+                try
+                {
+                    await acquire;
+                    observed = null!;
+                }
+                catch (Exception ex)
+                {
+                    observed = ex;
+                }
+
+                // With the guard in place, a redelivered cancellation must never replace the domain
+                // error - the caller always observes PoolClosedError, never OperationCanceledException,
+                // for this path.
+                Assert.IsType<PoolClosedError>(observed);
+
+                await Helpers.SpinUntilAsync(() => closes.Count >= 1);
+                Assert.Single(closes); // never closed twice
+            }
+        }
+
+        [Fact]
         public async Task PoolClosedMidRetry()
         {
             AsyncConnectionPool<FakeConn> pool = null!;

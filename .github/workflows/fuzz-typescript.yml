@@ -1,0 +1,42 @@
+name: fuzz (typescript)
+
+on:
+  schedule:
+    - cron: "20 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      fuzz-seconds:
+        description: "Fuzzing budget (mapped to iterations = fuzz-seconds * 2000)"
+        default: "120"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        working-directory: typescript
+        run: npm ci
+
+      - name: Fuzz async primitives
+        working-directory: typescript
+        env:
+          FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
+        run: npx tsx fuzz/async-primitives.fuzz.ts --iterations=$((FUZZ_SECONDS * 2000)) --seed=$RANDOM

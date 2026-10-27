@@ -56,6 +56,9 @@ func (p RetryPolicy) ShouldRetry(err error) bool {
 
 // DelayFor returns the delay before the next attempt, given how many attempts have failed so far.
 func (p RetryPolicy) DelayFor(failedAttempts int, rng *rand.Rand) float64 {
-	ceiling := math.Min(p.MaxDelay, p.BaseDelay*math.Pow(p.Multiplier, float64(failedAttempts-1)))
+	ceiling := 0.0
+	if p.BaseDelay != 0.0 { // avoids 0 * Inf = NaN when Multiplier^(n-1) overflows
+		ceiling = math.Min(p.MaxDelay, p.BaseDelay*math.Pow(p.Multiplier, float64(failedAttempts-1)))
+	}
 	return ceiling * (1.0 - p.Jitter + p.Jitter*rng.Float64())
 }

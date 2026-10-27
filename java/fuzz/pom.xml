@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Standalone Jazzer fuzz harness for the divergent async primitives: AsyncAwait.await's
+  shield/cancellation race (the Java twin of Python's asyncio.shield / C#'s AwaitShielded +
+  AsyncCondition) and AsyncConnectionPool's lock/Condition waiter bookkeeping, driven via
+  acquireAsync/releaseAsync with CancelToken.
+
+  Deliberately NOT a <module> of ../pom.xml and not referenced from it: `mvn package`,
+  `run_tests.sh` (clean verify + jacoco:check 100% gate) and `lint.sh` (spotbugs:check) in
+  java/ never build, test, or lint this directory, and Jazzer is a dev-only dependency that
+  never ships in the library's own zero-runtime-deps jar.
+
+  Depends on the sibling connpool jar via a relative path dependency (install it to the local
+  repo first: `cd ../ && mvn -q -DskipTests install`), the same pattern SharpFuzz's csharp/fuzz
+  project uses with a ProjectReference.
+
+  Run:
+    cd ../ && mvn -q -DskipTests install          # publish connpool to the local .m2 cache
+    cd fuzz && mvn test                            # one-shot JUnit regression corpus replay
+    cd fuzz && JAZZER_FUZZ=1 mvn test -DargLine="-Djazzer.time=30"  # short coverage-guided fuzz run
+  (JAZZER_FUZZ is an env var, not a Maven -D property - mvn -D flags only reach the forked JVM
+  surefire launches, and Jazzer's JUnit extension reads JAZZER_FUZZ from the process environment
+  to decide whether a @FuzzTest runs once or drives libFuzzer.)
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.jeffeek</groupId>
+    <artifactId>connpool-fuzz</artifactId>
+    <version>0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>17</maven.compiler.release>
+        <connpool.version>1.0.14</connpool.version>
+        <jazzer.version>0.24.0</jazzer.version>
+        <junit.version>6.1.3</junit.version>
+        <junit.platform.version>6.1.3</junit.platform.version>
+        <maven.test.skip>false</maven.test.skip>
+    </properties>
+
+    <!-- jazzer-junit 0.24.0 transitively pulls junit-platform-{commons,launcher} 1.9.0, which
+         clashes with junit-jupiter 6.1.3's junit-platform-engine 6.1.3 ("OutputDirectoryCreator
+         not available" at test discovery). Pin the platform artifacts to the jupiter version so
+         the whole JUnit Platform stack is aligned. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-commons</artifactId>
+                <version>${junit.platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-launcher</artifactId>
+                <version>${junit.platform.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.jeffeek</groupId>
+            <artifactId>connpool</artifactId>
+            <version>${connpool.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.code-intelligence</groupId>
+            <artifactId>jazzer-junit</artifactId>
+            <version>${jazzer.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.16.0</version>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.6.1</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

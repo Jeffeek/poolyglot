@@ -497,6 +497,95 @@ func TestAsync_DuplicateConnectionFromFactoryIsRejected(t *testing.T) {
 	}
 }
 
+// TestAsync_DuplicateConnectionNotClosedBySecondOwner documents the invariant that protects Go
+// from the Python double-free bug (CancelledError redelivered after registerNew's cleanup runs,
+// landing in acquire's catch-all and re-disposing the same connection). Go's context.Context
+// cancellation is only ever observed as a returned error at explicit select points; registerNew
+// has none between freeSlot()/destroy() and its `return`, and acquireLoop/Acquire propagate that
+// error verbatim with no catch-all re-dispose branch. So a duplicate connection -- still owned by
+// whoever's first Acquire returned it -- must never be closed by the pool, and size must drop by
+// exactly one for the rejected duplicate.
+func TestAsync_DuplicateConnectionNotClosedBySecondOwner(t *testing.T) {
+	shared := newFakeConn()
+	factory := &AsyncFuncFactory[*FakeConn]{
+		CreateFn: func(ctx context.Context) (*FakeConn, error) { return shared, nil },
+	}
+	rec := &Recorder{}
+	pool := mustAsyncPool(factory, quietConfig(), &Options[*FakeConn]{Listeners: []PoolListener[*FakeConn]{rec}})
+	defer pool.Close(context.Background(), nil)
+
+	ctx := context.Background()
+	first, err := pool.Acquire(ctx, Unset())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = pool.Acquire(ctx, Unset())
+	var cce *ConnectionCreateError
+	if !errors.As(err, &cce) {
+		t.Fatalf("expected ConnectionCreateError, got %v", err)
+	}
+
+	// The duplicate must never be closed -- its real owner (first) still holds it.
+	if shared.Closed {
+		t.Fatalf("duplicate connection was closed by the pool; real owner still holds it")
+	}
+	if n := len(rec.closedReasons()); n != 0 {
+		t.Fatalf("expected 0 close events for the rejected duplicate, got %d", n)
+	}
+	// Only the first connection counts toward size; the duplicate's reserved slot was freed.
+	if s := pool.Stats(); s.Size != 1 || s.Created != 1 {
+		t.Fatalf("unexpected stats: %+v", s)
+	}
+
+	if err := pool.Release(first); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAsync_ClosedPathDisposesExactlyOnce documents the mirror invariant for the "closed" branch
+// of registerNew: a connection whose factory.Create() finishes just as the pool closes (so
+// registerNew observes p.closed == true) must be disposed exactly once (one factory.Close, one
+// size--), never twice -- the Python double-free this test suite guards against.
+func TestAsync_ClosedPathDisposesExactlyOnce(t *testing.T) {
+	createStarted := make(chan struct{})
+	releaseCreate := make(chan struct{})
+	factory := &AsyncFuncFactory[*FakeConn]{
+		CreateFn: func(ctx context.Context) (*FakeConn, error) {
+			close(createStarted)
+			<-releaseCreate
+			return newFakeConn(), nil
+		},
+	}
+	rec := &Recorder{}
+	pool := mustAsyncPool(factory, quietConfig(), &Options[*FakeConn]{Listeners: []PoolListener[*FakeConn]{rec}})
+	ctx := context.Background()
+
+	acquireErrCh := make(chan error, 1)
+	go func() {
+		_, err := pool.Acquire(ctx, Unset())
+		acquireErrCh <- err
+	}()
+
+	<-createStarted              // Create is running (slot already reserved)
+	_ = pool.Close(ctx, nil)     // flips p.closed under lock; no connection registered yet
+	close(releaseCreate)         // let Create finish -> registerNew observes action == "closed"
+
+	err := <-acquireErrCh
+	var pce *PoolClosedError
+	if !errors.As(err, &pce) {
+		t.Fatalf("expected PoolClosedError, got %v", err)
+	}
+
+	// Exactly one dispose for the connection that finished creating into a closed pool.
+	if n := len(rec.closedReasons()); n != 1 {
+		t.Fatalf("expected exactly 1 close event, got %d: %v", n, rec.closedReasons())
+	}
+	if s := pool.Stats(); s.Size != 0 {
+		t.Fatalf("expected size 0 after single dispose, got %+v", s)
+	}
+}
+
 func TestAsync_ValidateIdleEvictsDeadConnections(t *testing.T) {
 	af := newAsyncFakeFactory()
 	cfg := quietConfig()
