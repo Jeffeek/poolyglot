@@ -14,6 +14,7 @@ Node 22+ and `tsx` (already a dev dependency). No special toolchain.
 ```bash
 npx tsx fuzz/async-primitives.fuzz.ts                        # 2000 iterations
 npx tsx fuzz/async-primitives.fuzz.ts --iterations=20000 --seed=42
+npx tsx fuzz/async-primitives.fuzz.ts --max-seconds=120      # run for a wall-clock budget instead
 ```
 
 A failure is any asserted invariant breaking: a mutual-exclusion violation, a hang caught by the

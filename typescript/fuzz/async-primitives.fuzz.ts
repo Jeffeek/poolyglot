@@ -23,7 +23,7 @@
 import assert from "node:assert/strict";
 import { AsyncCondition, awaitShielded } from "../src/pools/async-primitives.js";
 
-function parseArgs(): { iterations: number; seed: number } {
+function parseArgs(): { iterations: number; seed: number; maxSeconds: number } {
   const args = Object.fromEntries(
     process.argv.slice(2).map((a) => {
       const [k, v] = a.replace(/^--/, "").split("=");
@@ -33,6 +33,7 @@ function parseArgs(): { iterations: number; seed: number } {
   return {
     iterations: Number(args.iterations ?? 2000),
     seed: Number(args.seed ?? Date.now()),
+    maxSeconds: Number(args["max-seconds"] ?? 0), // 0 = run the full iteration count, no time bound
   };
 }
 
@@ -158,11 +159,18 @@ async function runOne(rng: () => number): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { iterations, seed } = parseArgs();
+  const { iterations, seed, maxSeconds } = parseArgs();
   const rng = mulberry32(seed);
-  console.log(`fuzzing AsyncCondition/awaitShielded: iterations=${iterations} seed=${seed}`);
+  const deadline = maxSeconds > 0 ? Date.now() + maxSeconds * 1000 : Number.POSITIVE_INFINITY;
+  console.log(
+    `fuzzing AsyncCondition/awaitShielded: iterations=${iterations}` +
+      `${maxSeconds > 0 ? ` max-seconds=${maxSeconds}` : ""} seed=${seed}`,
+  );
 
-  for (let i = 0; i < iterations; i++) {
+  let i = 0;
+  let lastLog = Date.now();
+  for (; i < iterations; i++) {
+    if (Date.now() >= deadline) break; // time budget hit — stop early, report what ran
     try {
       await runOne(rng);
     } catch (error) {
@@ -174,9 +182,14 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
+    // Liveness: CI needs to see the fuzzer is making progress, not hanging.
+    if (Date.now() - lastLog >= 2000) {
+      console.log(`... ${i + 1} iterations ok`);
+      lastLog = Date.now();
+    }
   }
 
-  console.log(`ok: ${iterations} iterations, no invariant violations, no unhandled rejections`);
+  console.log(`ok: ${i} iterations, no invariant violations, no unhandled rejections`);
 }
 
 await main();

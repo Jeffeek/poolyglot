@@ -2,8 +2,9 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+`poolyglot` ships every language implementation from one shared version (the root
+`VERSION` file). Security fixes are released against the latest published version only;
+there are no long-term support branches for older releases.
 
 | Version | Supported          |
 | ------- | ------------------ |
@@ -11,8 +12,23 @@ currently being supported with security updates.
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Please report security issues **privately** — do not open a public issue or pull request
+for a suspected vulnerability.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Use GitHub's private vulnerability reporting:
+<https://github.com/Jeffeek/poolyglot/security/advisories/new>
+
+In your report please include, as far as you can:
+
+- the affected language implementation(s) and version,
+- a description of the issue and its impact,
+- steps to reproduce (a minimal code sample or failing test is ideal).
+
+### What to expect
+
+- We aim to acknowledge a report within **7 business days**.
+- We will confirm the issue, keep you updated on progress, and let you know if a report is
+  declined (for example, if it turns out to be expected behaviour or out of scope).
+- Accepted vulnerabilities are fixed in the next release across all affected language
+  implementations, and we will credit you in the advisory unless you prefer to remain
+  anonymous.

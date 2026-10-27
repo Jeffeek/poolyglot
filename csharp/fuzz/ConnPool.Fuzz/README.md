@@ -13,12 +13,25 @@ A libFuzzer toolchain (clang) — i.e. Linux or WSL — plus the SharpFuzz CLI:
 dotnet tool install --global SharpFuzz.CommandLine
 ```
 
+`Fuzzer.LibFuzzer.Run` does not run libFuzzer itself; it talks to the native `libfuzzer-dotnet`
+loader. Build that loader once (its source is tiny and stable):
+
+```bash
+curl -fsSL -o libfuzzer-dotnet.cc \
+  https://raw.githubusercontent.com/Metalnem/libfuzzer-dotnet/master/libfuzzer-dotnet.cc
+clang -fsanitize=fuzzer libfuzzer-dotnet.cc -o libfuzzer-dotnet
+```
+
 ## Build & run
 
 ```bash
 dotnet build fuzz/ConnPool.Fuzz/ConnPool.Fuzz.csproj -c Release
 sharpfuzz fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.dll          # instrument the library
-dotnet fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.Fuzz.dll fuzz/corpus -max_total_time=60
+mkdir -p fuzz/corpus
+./libfuzzer-dotnet \
+  --target_path="$(command -v dotnet)" \
+  --target_arg="$PWD/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.Fuzz.dll" \
+  fuzz/corpus -max_total_time=60
 ```
 
 A crash is any unhandled exception other than `OperationCanceledException`, `PoolTimeoutError`, or

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       fuzz-seconds:
-        description: "Fuzzing budget (mapped to iterations = fuzz-seconds * 2000)"
+        description: "How many seconds to fuzz"
         default: "120"
 
 permissions:
@@ -39,4 +39,6 @@ jobs:
         working-directory: typescript
         env:
           FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
-        run: npx tsx fuzz/async-primitives.fuzz.ts --iterations=$((FUZZ_SECONDS * 2000)) --seed=$RANDOM
+        run: |
+          case "$FUZZ_SECONDS" in ''|*[!0-9]*) echo "fuzz-seconds must be a positive integer" >&2; exit 1 ;; esac
+          npx tsx fuzz/async-primitives.fuzz.ts --iterations=100000000 --max-seconds="$FUZZ_SECONDS" --seed="$RANDOM"
