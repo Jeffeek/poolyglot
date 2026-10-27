@@ -18,8 +18,63 @@ permissions:
   contents: read
 
 jobs:
+  # Decide which languages CodeQL analyzes. push-to-main and the weekly schedule
+  # always scan the FULL matrix (security baseline). On PRs we scan only the
+  # languages whose folders changed — or the full matrix if this workflow file
+  # itself changed. This keeps PR CI from rebuilding/reanalyzing 5 untouched
+  # languages on a single-folder change.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      languages: ${{ steps.langs.outputs.languages }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Detect changed language folders (PRs only)
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          # Filter keys ARE the CodeQL language identifiers (so outputs.changes
+          # feeds straight into the matrix). 'all' is a sentinel: a change to this
+          # workflow file forces a full scan.
+          filters: |
+            python: ['python/**']
+            javascript-typescript: ['typescript/**']
+            csharp: ['csharp/**']
+            java-kotlin: ['java/**']
+            go: ['go/**']
+            rust: ['rust/**']
+            all: ['.github/workflows/codeql.yml']
+
+      - name: Compute language matrix
+        id: langs
+        env:
+          EVENT: ${{ github.event_name }}
+          CHANGES: ${{ steps.filter.outputs.changes }}
+        run: |
+          full='["python","javascript-typescript","csharp","java-kotlin","go","rust"]'
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "languages=$full" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$CHANGES" | grep -q '"all"'; then
+            echo "languages=$full" >> "$GITHUB_OUTPUT"
+          else
+            echo "languages=$CHANGES" >> "$GITHUB_OUTPUT"
+          fi
+
   analyze:
     name: Analyze (${{ matrix.language }})
+    needs: changes
+    if: needs.changes.outputs.languages != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -29,19 +84,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - language: python
-            build-mode: none
-          - language: javascript-typescript # CodeQL's identifier for the JS/TS family
-            build-mode: none
-          - language: csharp
-            build-mode: manual
-          - language: java-kotlin # CodeQL's identifier for the JVM family
-            build-mode: manual
-          - language: go
-            build-mode: manual
-          - language: rust
-            build-mode: none
+        language: ${{ fromJSON(needs.changes.outputs.languages) }}
     steps:
       - name: Harden the runner
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
@@ -75,11 +118,12 @@ jobs:
           go-version: stable # CodeQL just needs a working toolchain; go.mod pins the language level
 
       # --- CodeQL: deeper security suite + skip tests/examples/build output noise ---
+      # build-mode is derived from the language: the compiled languages build manually below.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
+          build-mode: ${{ (matrix.language == 'csharp' || matrix.language == 'java-kotlin' || matrix.language == 'go') && 'manual' || 'none' }}
           queries: security-extended
           # paths-ignore only applies to the interpreted extractors (python, javascript-typescript);
           # the compiled languages analyze whatever their build compiles.
@@ -111,3 +155,24 @@ jobs:
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:${{ matrix.language }}"
+
+  # Single aggregated status check. It ALWAYS runs, so a conditionally-skipped
+  # language leg never leaves a required check stuck 'pending'. Make THIS job
+  # ("codeql") the required status check in branch protection — not the
+  # per-language "Analyze (...)" legs. Passes when analyze succeeded or was
+  # legitimately skipped (no language folders changed); fails only on real failure.
+  codeql:
+    name: codeql
+    needs: [changes, analyze]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require successful (or skipped) analysis
+        env:
+          RESULT: ${{ needs.analyze.result }}
+        run: |
+          if [ "$RESULT" = "failure" ] || [ "$RESULT" = "cancelled" ]; then
+            echo "CodeQL analysis did not pass (analyze result: $RESULT)"
+            exit 1
+          fi
+          echo "CodeQL gate passed (analyze result: $RESULT)"
