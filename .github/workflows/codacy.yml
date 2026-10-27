@@ -18,35 +18,19 @@ concurrency:
 
 jobs:
   codacy-security-scan:
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # Analyze and push results to the Codacy dashboard (this is what feeds the
+      # quality grade/badge). `upload: true` sends to Codacy's own API, which has
+      # no GitHub SARIF run limits — so no results.sarif / upload-sarif step, and
+      # no `security-events` permission needed. Security findings for GitHub's
+      # Security tab are already covered by codeql.yml (security-extended, all langs).
       - name: Run Codacy Analysis CLI
         uses: codacy/codacy-analysis-cli-action@562ee3e92b8e92df8b67e0a5ff8aa8e261919c08 # v4.4.7
         with:
           project-token: ${{ secrets.CODACY_PROJECT_TOKEN }}
+          upload: true
           verbose: true
-          output: results.sarif
-          format: sarif
-
-      # Codacy bundles several tools into one results.sarif as multiple runs[], all
-      # named "Codacy". Since 2025-07-22 upload-sarif rejects multiple runs that share
-      # (tool.driver.name, automationDetails.id), so stamp a unique id per run. This
-      # replaces the old per-upload `category:` (which overrode these ids). See
-      # https://github.blog/changelog/2025-07-21-code-scanning-will-stop-combining-multiple-sarif-runs-uploaded-in-the-same-sarif-file/
-      - name: Give each SARIF run a unique category
-        run: |
-          jq '.runs |= [ range(0; length) as $i | .[$i] | .automationDetails.id = ("codacy/" + (.tool.driver.name // "tool") + "/" + ($i | tostring)) ]' results.sarif > results.fixed.sarif
-          mv results.fixed.sarif results.sarif
-
-      - name: Upload SARIF results to GitHub
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
-        with:
-          sarif_file: results.sarif
