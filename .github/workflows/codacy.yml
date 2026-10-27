@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# A newer commit on the same ref cancels in-flight runs (PRs only; never cancel a main run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   codacy-security-scan:
     permissions:
@@ -31,8 +36,17 @@ jobs:
           output: results.sarif
           format: sarif
 
+      # Codacy bundles several tools into one results.sarif as multiple runs[], all
+      # named "Codacy". Since 2025-07-22 upload-sarif rejects multiple runs that share
+      # (tool.driver.name, automationDetails.id), so stamp a unique id per run. This
+      # replaces the old per-upload `category:` (which overrode these ids). See
+      # https://github.blog/changelog/2025-07-21-code-scanning-will-stop-combining-multiple-sarif-runs-uploaded-in-the-same-sarif-file/
+      - name: Give each SARIF run a unique category
+        run: |
+          jq '.runs |= [ range(0; length) as $i | .[$i] | .automationDetails.id = ("codacy/" + (.tool.driver.name // "tool") + "/" + ($i | tostring)) ]' results.sarif > results.fixed.sarif
+          mv results.fixed.sarif results.sarif
+
       - name: Upload SARIF results to GitHub
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: results.sarif
-          category: codacy-security-scan-${{ github.event_name }}-${{ github.run_id }}
