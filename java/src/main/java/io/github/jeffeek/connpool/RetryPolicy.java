@@ -43,7 +43,11 @@ public record RetryPolicy(
 
   /** Delay before the next attempt, given how many attempts have failed so far. */
   public double delayFor(int failedAttempts, Random rng) {
-    double ceiling = Math.min(maxDelay, baseDelay * Math.pow(multiplier, failedAttempts - 1));
+    // baseDelay == 0 means no backoff; avoid 0 * Inf = NaN when multiplier^(n-1) overflows.
+    double ceiling =
+        baseDelay == 0.0
+            ? 0.0
+            : Math.min(maxDelay, baseDelay * Math.pow(multiplier, failedAttempts - 1));
     return ceiling * (1.0 - jitter + jitter * rng.nextDouble());
   }
 

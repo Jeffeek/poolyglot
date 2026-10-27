@@ -51,10 +51,12 @@ export class RetryPolicy {
 
   /** Delay before the next attempt, given how many attempts have failed so far. */
   delayFor(failedAttempts: number, rng: Rng): number {
-    const ceiling = Math.min(
-      this.maxDelay,
-      this.baseDelay * this.multiplier ** (failedAttempts - 1),
-    );
+    // baseDelay === 0 means no backoff configured; avoid 0 * Infinity = NaN
+    // when multiplier ** (failedAttempts - 1) overflows for large failedAttempts.
+    const ceiling =
+      this.baseDelay === 0
+        ? 0
+        : Math.min(this.maxDelay, this.baseDelay * this.multiplier ** (failedAttempts - 1));
     return ceiling * (1.0 - this.jitter + this.jitter * rng());
   }
 

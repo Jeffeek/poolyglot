@@ -1425,6 +1425,59 @@ mod tests {
         p.release(a).await.unwrap();
     }
 
+    /// Regression for the cross-language "register-new cleanup" double-free: a cancellation
+    /// (future drop) landing while `register_new`'s closed-path cleanup (`destroy_detached(...)
+    /// .await`, which itself awaits `factory.close()`) is in flight must never let a second,
+    /// outer disposal run for the same connection. In Rust there is no redelivered-exception /
+    /// catch-all-redispose mechanism (cancellation is "drop the future"): dropping the acquire
+    /// future while it is suspended inside `close_conn().await` simply abandons that one in-flight
+    /// disposal attempt, and there is no `.await` between finishing cleanup and returning the
+    /// domain error, so a drop can never land in a gap *after* cleanup completes but before the
+    /// error is raised. A double disposal would double-call `factory.close()` for one connection
+    /// id and double-decrement `size` (a `usize`, so a second decrement past zero would panic on
+    /// underflow). This races the drop against the close repeatedly and asserts neither happens.
+    #[tokio::test]
+    async fn cancelled_register_new_closed_path_never_double_closes() {
+        for _ in 0..30 {
+            let h = AsyncHarness::with_system_clock();
+            h.fac.set_create_delay_ms(30); // keep acquire in create() long enough to close concurrently
+            h.fac.set_close_delay_ms(30); // slow close() so we can drop the acquire future mid-disposal
+            let p = h.pool(plain(1));
+            let p2 = p.clone();
+            {
+                let fut = p.acquire(Timeout::Infinite);
+                tokio::pin!(fut);
+                // Close the pool while create() is still in flight, so by the time create()
+                // finishes, register_new() observes `closed` and enters the cleanup path
+                // (destroy_detached -> close_conn().await, now slow). Drop the acquire future
+                // mid-`close_conn()`.
+                let closer = tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    p2.close(None).await;
+                });
+                let _ = tokio::time::timeout(Duration::from_millis(40), &mut fut).await;
+                closer.await.unwrap();
+                // fut dropped here, racing with close_conn().await inside register_new's
+                // closed-path cleanup.
+            }
+            // Give any (incorrect) second disposal a chance to run before asserting.
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let closed = h.fac.closed_ids();
+            assert!(
+                closed.len() <= 1,
+                "factory.close() must run at most once for the connection, got {closed:?}"
+            );
+            // `size` is a `usize`: a double-decrement past zero panics on underflow in debug and
+            // wraps to a huge value in release — either way this bounds check (plus the lack of a
+            // panic) proves it was decremented at most once.
+            assert!(
+                p.stats().size <= 1,
+                "pool size must never be double-decremented, got {}",
+                p.stats().size
+            );
+        }
+    }
+
     #[tokio::test]
     async fn cancelled_borrow_returns_connection() {
         let h = AsyncHarness::with_system_clock();

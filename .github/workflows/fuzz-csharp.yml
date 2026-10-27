@@ -1,0 +1,65 @@
+# Bespoke continuous-fuzzing job for the C# SharpFuzz harness (csharp/fuzz/ConnPool.Fuzz).
+# .NET is NOT an OSS-Fuzz / ClusterFuzzLite-supported language, so this cannot use those
+# frameworks — it drives SharpFuzz over libFuzzer directly (clang + the sharpfuzz CLI).
+name: fuzz (csharp)
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      fuzz-seconds:
+        description: "How many seconds to fuzz"
+        default: "120"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  csharp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Install clang (libFuzzer) + SharpFuzz CLI
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang
+          dotnet tool install --global SharpFuzz.CommandLine
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Build harness (Release)
+        run: dotnet build csharp/fuzz/ConnPool.Fuzz/ConnPool.Fuzz.csproj -c Release
+
+      - name: Instrument the library DLL
+        run: sharpfuzz csharp/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.dll
+
+      - name: Fuzz
+        run: |
+          mkdir -p csharp/fuzz/corpus
+          dotnet csharp/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.Fuzz.dll \
+            csharp/fuzz/corpus \
+            -max_total_time=${{ github.event.inputs.fuzz-seconds || '120' }}
+
+      - name: Upload crashes + corpus
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-csharp-crashes
+          path: |
+            csharp/fuzz/**/crash-*
+            csharp/fuzz/corpus

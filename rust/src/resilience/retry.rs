@@ -103,9 +103,14 @@ impl RetryPolicy {
     /// The delay before the next attempt, given how many attempts have failed so far
     /// (`failed_attempts` is 1-based: pass `1` after the first failure).
     pub fn delay_for(&self, failed_attempts: u32, rng: &mut dyn Rng) -> f64 {
-        let ceiling = self
-            .max_delay
-            .min(self.base_delay * self.multiplier.powi(failed_attempts as i32 - 1));
+        // base_delay == 0 means no backoff configured; guard separately so a large
+        // `multiplier.powi(..)` overflow to +Inf can't turn `0.0 * Inf` into NaN.
+        let ceiling = if self.base_delay == 0.0 {
+            0.0
+        } else {
+            self.max_delay
+                .min(self.base_delay * self.multiplier.powi(failed_attempts as i32 - 1))
+        };
         ceiling * (1.0 - self.jitter + self.jitter * rng.next_f64())
     }
 }
@@ -192,5 +197,20 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(det.delay_for(1, &mut rng), 0.1);
+    }
+
+    #[test]
+    fn delay_zero_base_never_nan_even_on_power_overflow() {
+        let mut rng = SystemRng::with_seed(7);
+        // base_delay == 0.0 && multiplier > 1 && failed_attempts large enough that
+        // multiplier.powi(..) overflows to +Inf: 0.0 * Inf used to yield NaN.
+        let p = RetryPolicy {
+            base_delay: 0.0,
+            multiplier: 2.0,
+            ..Default::default()
+        };
+        let d = p.delay_for(10_000, &mut rng);
+        assert!(d.is_finite(), "delay {d}");
+        assert_eq!(d, 0.0);
     }
 }

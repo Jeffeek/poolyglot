@@ -75,6 +75,13 @@ test("backoff with partial jitter interpolates between floor and ceiling", () =>
   );
 });
 
+test("baseDelay 0 with large failedAttempts stays finite (no NaN/Inf overflow)", () => {
+  const p = new RetryPolicy({ baseDelay: 0, multiplier: 2, jitter: 0.5 });
+  const d = p.delayFor(2000, () => 0.5);
+  assert.equal(d, 0);
+  assert.ok(Number.isFinite(d));
+});
+
 test("retry-on filter narrows retryable errors", () => {
   class ConnectionError extends Error {}
   class ConnectionResetError extends ConnectionError {}

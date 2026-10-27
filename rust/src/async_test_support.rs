@@ -30,6 +30,7 @@ pub struct AsyncFactoryState {
     force_id: Mutex<Option<u64>>,
     create_delay_ms: AtomicU64,
     validate_delay_ms: AtomicU64,
+    close_delay_ms: AtomicU64,
     close_err: AtomicBool,
 }
 
@@ -46,6 +47,7 @@ impl AsyncFactoryState {
             force_id: Mutex::new(None),
             create_delay_ms: AtomicU64::new(0),
             validate_delay_ms: AtomicU64::new(0),
+            close_delay_ms: AtomicU64::new(0),
             close_err: AtomicBool::new(false),
         })
     }
@@ -70,6 +72,9 @@ impl AsyncFactoryState {
     }
     pub fn set_validate_delay_ms(&self, ms: u64) {
         self.validate_delay_ms.store(ms, Ordering::SeqCst);
+    }
+    pub fn set_close_delay_ms(&self, ms: u64) {
+        self.close_delay_ms.store(ms, Ordering::SeqCst);
     }
     pub fn set_close_err(&self, e: bool) {
         self.close_err.store(e, Ordering::SeqCst);
@@ -118,6 +123,10 @@ impl AsyncConnectionFactory<Conn> for AsyncTestFactory {
     }
 
     async fn close(&self, conn: &Conn) -> Result<(), FactoryError> {
+        let delay = self.0.close_delay_ms.load(Ordering::SeqCst);
+        if delay > 0 {
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+        }
         self.0.closed.lock().unwrap().push(conn.id);
         if self.0.close_err.load(Ordering::SeqCst) {
             return Err("close failed".into());

@@ -35,6 +35,19 @@ namespace ConnPool.Tests.Resilience
         }
 
         [Fact]
+        public void ZeroBaseDelayNeverNaN()
+        {
+            var p = new RetryPolicy { BaseDelay = 0, Multiplier = 2, Jitter = 0.5 };
+            var rng = new Random(0);
+            foreach (int n in new[] { 1, 2, 100, 1000 })
+            {
+                double d = p.DelayFor(n, rng);
+                Assert.False(double.IsNaN(d));
+                Assert.Equal(0.0, d);
+            }
+        }
+
+        [Fact]
         public void RetryOnFilter()
         {
             var p = new RetryPolicy { RetryOn = e => e is ConnErr };

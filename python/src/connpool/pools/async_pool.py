@@ -366,13 +366,33 @@ class AsyncConnectionPool(Generic[T]):
         if action == "duplicate":
             # The same object we already manage: not a new connection, so it is not
             # counted as created, and we never close it (its real owner still holds it).
-            await self._free_slot()
+            # ``_free_slot`` is a real await point (lock acquisition), so a cancellation can
+            # be redelivered right after it returns but before the raise below. Without the
+            # guard, that CancelledError - not ConnectionCreateError - would propagate to
+            # acquire()'s `except BaseException` branch, which doesn't know cleanup already
+            # happened and would destroy this connection via _destroy() even though its real
+            # owner still holds it (double size-- and a foreign-owned close()).
+            try:
+                await self._free_slot()
+            except asyncio.CancelledError:
+                pass  # slot already freed; report the real reason below
             raise ConnectionCreateError(
                 f"pool {self.name!r}: factory.create() returned an object the pool already manages; "
                 "each create() must return a distinct connection")
         self._events.dispatch("on_connection_created", pooled, created_in)
         if action == "closed":                           # built but unusable: created + closed
-            await self._destroy(pooled, CloseReason.POOL_CLOSED)
+            # ``_destroy`` is shielded, so the dispose itself always completes even if this
+            # task is cancelled while awaiting it - but the await can still have CancelledError
+            # redelivered to *this* coroutine once the shield resolves (that's how shield()
+            # works: it only protects the inner coroutine, not the outer awaiter). Without the
+            # guard below, that CancelledError - not PoolClosedError - would propagate to
+            # acquire()'s `except BaseException` branch, which doesn't know cleanup already
+            # happened and would destroy the already-disposed connection again (double free:
+            # size decremented twice, factory.close() called twice).
+            try:
+                await self._destroy(pooled, CloseReason.POOL_CLOSED)
+            except asyncio.CancelledError:
+                pass  # disposal already completed (shielded); report the real reason below
             raise PoolClosedError(f"pool {self.name!r} is closed")
 
     async def _create_raw(self, deadline: float | None) -> T:

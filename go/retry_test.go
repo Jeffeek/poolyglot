@@ -2,6 +2,7 @@ package connpool
 
 import (
 	"errors"
+	"math"
 	"math/rand"
 	"testing"
 )
@@ -51,6 +52,23 @@ func TestRetry_Backoff(t *testing.T) {
 		if d < 0.0 || d > 4.0 {
 			t.Fatalf("DelayFor(1) = %v, out of [0, 4]", d)
 		}
+	}
+}
+
+func TestRetry_ZeroBaseDelayNeverNaN(t *testing.T) {
+	p := RetryPolicy{MaxAttempts: 1, BaseDelay: 0, MaxDelay: 5, Multiplier: 2, Jitter: 0.5}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("unexpected validate error: %v", err)
+	}
+	rng := rand.New(rand.NewSource(0))
+	// failedAttempts large enough that Multiplier^(n-1) overflows to +Inf; BaseDelay==0 must
+	// still yield a finite 0 delay instead of 0*Inf = NaN.
+	got := p.DelayFor(2000, rng)
+	if math.IsNaN(got) || math.IsInf(got, 0) {
+		t.Fatalf("DelayFor(2000) = %v, want finite 0", got)
+	}
+	if got != 0 {
+		t.Errorf("DelayFor(2000) = %v, want 0", got)
 	}
 }
 

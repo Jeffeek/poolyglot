@@ -36,7 +36,11 @@ class RetryPolicy:
 
     def delay_for(self, failed_attempts: int, rng: random.Random) -> float:
         """Delay before the next attempt, given how many attempts have failed so far."""
-        ceiling = min(self.max_delay, self.base_delay * self.multiplier ** (failed_attempts - 1))
+        ceiling = (
+            0.0
+            if self.base_delay == 0.0
+            else min(self.max_delay, self.base_delay * self.multiplier ** (failed_attempts - 1))
+        )
         return ceiling * (1.0 - self.jitter + self.jitter * rng.random())
 
 

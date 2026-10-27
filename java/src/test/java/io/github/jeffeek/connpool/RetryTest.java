@@ -43,6 +43,22 @@ class RetryTest {
   }
 
   @Test
+  void zeroBaseDelayNeverNaN() {
+    RetryPolicy p =
+        RetryPolicy.builder()
+            .maxAttempts(1000)
+            .baseDelay(0)
+            .maxDelay(5)
+            .multiplier(2)
+            .jitter(0.5)
+            .build();
+    Random rng = new Random(0);
+    double d = p.delayFor(1000, rng); // multiplier^999 overflows to +Inf without the fix
+    assertEquals(0.0, d);
+    assertFalse(Double.isNaN(d));
+  }
+
+  @Test
   void retryOnFilter() {
     RetryPolicy p = RetryPolicy.builder().retryOn(e -> e instanceof TestSupport.ConnErr).build();
     assertTrue(p.shouldRetry(new TestSupport.ConnReset("x")));

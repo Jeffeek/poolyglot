@@ -1,0 +1,53 @@
+name: fuzz (python)
+
+on:
+  schedule:
+    - cron: "40 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      fuzz-seconds:
+        description: "Seconds to run the Atheris fuzzer (-max_total_time)"
+        default: "120"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install clang/libFuzzer + Atheris
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+          pip install atheris
+
+      - name: Fuzz the async pool harness
+        working-directory: python
+        run: |
+          python fuzz/fuzz_async_pool.py -max_total_time=${{ github.event.inputs.fuzz-seconds || '120' }}
+
+      - name: Upload crash + corpus artifacts
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-python-crashes
+          path: |
+            python/crash-*
+            python/corpus
+          if-no-files-found: ignore

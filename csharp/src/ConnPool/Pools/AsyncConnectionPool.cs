@@ -520,6 +520,11 @@ namespace ConnPool
             }
             if (action == "duplicate")
             {
+                // Unlike the "closed" path below, FreeSlotAsync() takes no CancellationToken (its
+                // lock-wait is deliberately uncancellable, mirroring the create-failure cleanup at
+                // CreateAsync's catch above) - so a cancellation can never be redelivered between it
+                // and the throw below. ConnectionCreateError is always what Acquire observes here,
+                // so this path can't fall into the catch-all's second Destroy().
                 await FreeSlotAsync().ConfigureAwait(false);
                 throw new ConnectionCreateError(
                     $"pool '{Name}': factory.CreateAsync() returned an object the pool already manages; " +
@@ -528,7 +533,17 @@ namespace ConnPool
             _events.Dispatch(l => l.OnConnectionCreated(pooled, createdIn));
             if (action == "closed")
             {
-                await Destroy(pooled, CloseReason.PoolClosed, cancellationToken).ConfigureAwait(false);
+                // Same reasoning as the duplicate path above: Destroy() is already shielded so
+                // disposal itself always completes, but a cancellation redelivered right after it
+                // returns (and before the throw) must not replace PoolClosedError - that would
+                // route to Acquire's catch-all and dispose this connection a second time.
+                try
+                {
+                    await Destroy(pooled, CloseReason.PoolClosed, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
                 throw new PoolClosedError($"pool '{Name}' is closed");
             }
         }

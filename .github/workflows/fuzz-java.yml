@@ -1,0 +1,56 @@
+name: fuzz (java)
+
+on:
+  schedule:
+    - cron: "30 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      fuzz-seconds:
+        description: "libFuzzer -max_total_time budget (seconds) via jazzer.time"
+        required: false
+        default: "120"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          use-policy-store: true
+          api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Install connpool to local Maven repo
+        working-directory: java
+        run: mvn -q -B -DskipTests install
+
+      - name: Run Jazzer fuzz harness (bounded)
+        working-directory: java/fuzz
+        env:
+          JAZZER_FUZZ: "1"
+          FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
+        run: mvn -q -B test -DargLine="-Djazzer.time=${FUZZ_SECONDS}s"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: jazzer-findings
+          path: |
+            java/fuzz/**/crash-*
+            java/fuzz/**/.cifuzz-corpus/**
+            java/fuzz/**/*Inputs/**
+          if-no-files-found: ignore
