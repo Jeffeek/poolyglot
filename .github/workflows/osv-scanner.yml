@@ -45,7 +45,7 @@ concurrency:
 jobs:
   scan-scheduled:
     if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@0a65f82af05cd58cf587827b0bb0489548c18346" # v2.7.0
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a96bc4d2b09685b6142bcfe25a3dc17cb2d7347" # v2.7.0
     with:
       scan-args: |-
         -r
