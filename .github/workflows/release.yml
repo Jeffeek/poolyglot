@@ -45,8 +45,10 @@ jobs:
           [ "$VERSION" = "$FILE" ] || { echo "tag ${GITHUB_REF_NAME} != VERSION ${FILE}"; exit 1; }
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Install (dev + build tools)
-        run: pip install -e ".[dev]" build twine
+      - name: Install (hash-pinned dev + build tools, then editable package)
+        run: |
+          pip install --require-hashes -r requirements-release.txt
+          pip install -e . --no-deps
 
       # --- test ---
       - name: Tests + coverage gate (fail_under=100 in pyproject)
@@ -377,10 +379,12 @@ jobs:
           api-key: ${{ secrets.STEP_SECURITY_API_KEY }}
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Node 24 (LTS) bundles npm >= 11.5.1, which npm trusted publishing (OIDC) requires —
+      # so no `npm install -g npm@latest` bootstrap (an unpinnable, moving dependency) is needed.
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
       # The tag is the source of truth; it must agree with the committed VERSION.
@@ -398,13 +402,9 @@ jobs:
           PV="$(node -p "require('./package.json').version")"
           [ "$PV" = "$VERSION" ] || { echo "package.json version ${PV} != tag ${VERSION} (run release.sh)"; exit 1; }
 
-      # npm trusted publishing (OIDC) needs npm >= 11.5.1; Node 22 ships an older npm.
-      - name: Upgrade npm (OIDC-capable)
-        run: npm install -g npm@latest
-
       # --- install + build + test ---
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Build (library, ESM + types)
         run: npm run build
       - name: Type check
