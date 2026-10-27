@@ -48,13 +48,23 @@ jobs:
       - name: Instrument the library DLL
         run: sharpfuzz csharp/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.dll
 
+      - name: Build the libfuzzer-dotnet loader
+        run: |
+          # SharpFuzz's Fuzzer.LibFuzzer.Run talks to libFuzzer through this native loader
+          # (it is NOT a standalone executable). Source pinned by commit SHA.
+          curl -fsSL -o libfuzzer-dotnet.cc \
+            https://raw.githubusercontent.com/Metalnem/libfuzzer-dotnet/c33d28305eba24261ce1945a39576e659f437b90/libfuzzer-dotnet.cc
+          clang -fsanitize=fuzzer libfuzzer-dotnet.cc -o libfuzzer-dotnet
+
       - name: Fuzz
         env:
           FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
         run: |
           case "$FUZZ_SECONDS" in ''|*[!0-9]*) echo "fuzz-seconds must be a positive integer" >&2; exit 1 ;; esac
           mkdir -p csharp/fuzz/corpus
-          dotnet csharp/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.Fuzz.dll \
+          ./libfuzzer-dotnet \
+            --target_path="$(command -v dotnet)" \
+            --target_arg="$PWD/csharp/fuzz/ConnPool.Fuzz/bin/Release/net8.0/ConnPool.Fuzz.dll" \
             csharp/fuzz/corpus \
             -max_total_time="$FUZZ_SECONDS"
 
