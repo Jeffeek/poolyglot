@@ -509,12 +509,11 @@ export class AsyncConnectionPool<T extends object> {
     // matching the Python `left <= 0` outcome when the two limits are equal).
     const deadlineBound = rem !== null && (createTimeout === null || rem <= createTimeout);
     let limit: number | null;
-    if (createTimeout === null && rem === null) {
-      limit = null;
-    } else if (createTimeout === null) {
-      limit = Math.max(0, rem!);
-    } else if (rem === null) {
+    if (rem === null) {
+      // No acquire deadline: fall back to createTimeout (itself null = unbounded).
       limit = createTimeout;
+    } else if (createTimeout === null) {
+      limit = Math.max(0, rem);
     } else {
       limit = Math.max(0, Math.min(createTimeout, rem));
     }
