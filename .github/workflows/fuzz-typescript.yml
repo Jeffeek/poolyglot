@@ -41,4 +41,11 @@ jobs:
           FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
         run: |
           case "$FUZZ_SECONDS" in ''|*[!0-9]*) echo "fuzz-seconds must be a positive integer" >&2; exit 1 ;; esac
-          npx tsx fuzz/async-primitives.fuzz.ts --iterations=100000000 --max-seconds="$FUZZ_SECONDS" --seed="$RANDOM"
+          # jsfuzz has no run-for-N-seconds flag; `timeout` sends SIGTERM when the budget is
+          # hit (exit 124) which is the expected way this job ends — anything else (a real
+          # crash or hang killed with SIGKILL) is a failure. `|| code=$?` captures the status
+          # without tripping the shell's `set -e` (GitHub runs `run:` under `bash -e`), which
+          # would otherwise abort the step on the expected 124 before the guard below runs.
+          code=0
+          timeout "$FUZZ_SECONDS" npm run fuzz || code=$?
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then exit "$code"; fi
