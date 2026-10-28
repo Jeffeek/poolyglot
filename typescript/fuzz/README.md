@@ -1,42 +1,34 @@
 # connpool fuzz (TypeScript)
 
-Harness for the async primitives in `src/pools/async-primitives.ts` — `AsyncCondition` +
-`awaitShielded` with `AbortSignal` cancellation. It decodes coverage-guided random byte buffers into
-lock/wait/notify/abort operation sequences and asserts mutual exclusion, no lost wakeups, and
-shielded work always completing. It is not part of the test suite or coverage gate.
+Property-based harness for the async primitives in `src/pools/async-primitives.ts` —
+`AsyncCondition` + `awaitShielded` with `AbortSignal` cancellation. It generates randomized
+lock/wait/notify/abort scenarios and asserts mutual exclusion, no lost wakeups, and shielded work
+always completing. It is not part of the test suite or coverage gate.
 
-Powered by [jsfuzz](https://gitlab.com/gitlab-org/security-products/analyzers/fuzzers/jsfuzz), a
-**dev-only** dependency — it's a `devDependency` and the published package only ships `dist/`
-(see `package.json` `files`), so it never reaches consumers of `@jeffeek/connpool`.
+Powered by [fast-check](https://fast-check.dev), a **dev-only** dependency — it's a `devDependency`
+and the published package only ships `dist/` (see `package.json` `files`), so it never reaches
+consumers of `@jeffeek/connpool`. No build step, no native dependencies.
 
 ## Requirements
 
-Node 22+. `jsfuzz` and `esbuild` are already dev dependencies (`npm install`).
-
-> **Windows note:** jsfuzz's `pidusage` dependency shells out to `wmic` to read memory, which
-> Windows 11 removed — so `npm run fuzz` crashes after a few seconds. Run under WSL/Linux.
+Node 22+. `fast-check` and `tsx` are already dev dependencies (`npm install`).
 
 ## Run
 
 ```bash
-npm run fuzz                                 # fuzz indefinitely, writing new corpus entries as it finds coverage (Ctrl+C to stop)
-npm run fuzz -- --regression                 # replay fuzz/corpus instead of generating new inputs
-npm run fuzz -- --exact-artifact-path=crash  # write a crash to a fixed path instead of crash-<hash>
-npm run fuzz -- --timeout=10                 # fail a single fuzz() call that runs longer than N seconds (default 30)
+npm run fuzz                                       # 200 runs (~35s)
+npm run fuzz -- --num-runs=20000 --seed=42         # longer soak, fixed seed
+npm run fuzz -- --max-seconds=120                  # run for a wall-clock budget instead
 ```
 
-jsfuzz loads the fuzz target via CommonJS `require()` in a forked worker and instruments it with
-istanbul for **coverage-guided** mutation. So `npm run fuzz` runs `scripts/run-fuzz.mjs`, which
-first esbuild-bundles `async-primitives.fuzz.ts` (and its relative `../src/pools/async-primitives.js`
-import) into a single plain `fuzz/build/*.cjs`, then points jsfuzz at that. Bundling to CJS — rather
-than loading the TypeScript through a `tsx` loader — is what lets istanbul see the real source; under
-a loader, coverage stayed stuck at 0 and jsfuzz degraded to blind random mutation. No dependency on
-the public `dist` barrel (which doesn't export `AsyncCondition`/`awaitShielded` anyway).
+A concrete seed is always chosen and printed, so any run reproduces exactly via `--seed=<n>`, and
+progress is logged every couple of seconds (`... N runs ok`) so a long run never looks hung. On a
+failure fast-check **shrinks** to a minimal counterexample and prints it alongside the seed.
 
-Corpus entries accumulate under `fuzz/corpus/` (gitignored — regenerate locally, nothing to
-commit) as jsfuzz discovers inputs that hit new coverage.
+The default run count is modest on purpose: some scenarios wait on a notify that never arrives and
+only settle at the 1s watchdog (~170ms/run average), so CI drives the volume via `--max-seconds`.
 
 A failure is any asserted invariant breaking — a mutual-exclusion violation, a hang caught by the
 per-call watchdog, an unexpected `wait()` rejection, or an unhandled promise rejection — all of
-which `throw`, which jsfuzz reports as a crash (exit code 1, crash buffer written to disk, hex
-dump under ~200 bytes printed to the console for quick reproduction).
+which `throw`, which fast-check reports as a failed property (non-zero exit) with the shrunk
+scenario and the reproducing seed.

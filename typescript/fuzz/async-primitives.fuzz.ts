@@ -1,71 +1,69 @@
 /**
- * jsfuzz harness for the divergent async primitives (AsyncCondition + awaitShielded /
+ * Property-based fuzz harness for the divergent async primitives (AsyncCondition + awaitShielded /
  * AbortSignal cancellation) — the TypeScript twins of Python's asyncio.Condition/shield and
- * C#'s AsyncCondition. Not part of the test suite or coverage gate: jsfuzz drives
- * coverage-guided random byte buffers into `fuzz(buf)`, which decodes them into the same
- * operation sequence the old hand-rolled PRNG fed, and asserts invariants that must hold no
- * matter what order lock/wait/notify/abort happen in.
+ * C#'s AsyncCondition. Not part of the test suite or coverage gate: fast-check generates randomized
+ * lock/wait/notify/abort scenarios and asserts invariants that must hold no matter what order those
+ * operations happen in. On a violation fast-check shrinks to a minimal counterexample and prints the
+ * seed to reproduce it exactly.
  *
- * Dev-only (jsfuzz is a devDependency; the published package only ships "dist", see
- * package.json "files"). Run via:
+ * Dev-only, one dev dependency (fast-check; tsx runs it). The published package only ships "dist"
+ * (see package.json "files"), so none of this reaches consumers. Run directly:
  *
- *   npm run fuzz                                 # fuzz indefinitely (Ctrl+C to stop)
- *   npm run fuzz -- --exact-artifact-path=crash   # pin the crash file name
- *   npm run fuzz -- --regression                  # replay fuzz/corpus instead of generating
+ *   npx tsx fuzz/async-primitives.fuzz.ts                        # default: 1000 runs
+ *   npx tsx fuzz/async-primitives.fuzz.ts --num-runs=20000 --seed=42
+ *   npx tsx fuzz/async-primitives.fuzz.ts --max-seconds=120      # run for a wall-clock budget instead
  *
- * jsfuzz's worker loads the target via CommonJS `require()` and instruments it with istanbul for
- * coverage-guided mutation — so `scripts/run-fuzz.mjs` (what "npm run fuzz" invokes) first esbuild-
- * bundles this file and its relative `../src/pools/async-primitives.js` import into a single plain
- * `fuzz/build/*.cjs` that istanbul can see (loading via a tsx loader instead hid the real source,
- * leaving coverage stuck at 0). No dist import — AsyncCondition/awaitShielded aren't in the public
- * barrel anyway.
+ * Real time drives the primitives' waits/timeouts (setTimeout), so fast-check's arbitraries pick the
+ * scenario while actual timers/AbortControllers produce the concurrency — the same model the old
+ * hand-rolled PRNG fuzzer used, now with a reproducible seed and automatic shrinking.
  *
- * Invariants asserted every call:
+ * Invariants asserted every run:
  *   1. Mutual exclusion: at most one `lock()` holder is "inside the critical section" at a time.
- *   2. Every `lock()`/`wait()` call eventually settles (resolves or rejects) — no hang, bounded
- *      by a per-call watchdog timeout that throws loudly (a thrown error registers as a jsfuzz
- *      crash) instead of hanging the fuzzer forever.
- *   3. `wait()` never rejects with something other than the abort reason, and never resolves
- *      after the condition was disposed mid-wait.
- *   4. `awaitShielded` always rejects on abort (even pre-aborted) and the shielded work always
- *      runs to completion in the background regardless of the caller's outcome.
- *   5. No unhandled promise rejections escape a call.
+ *   2. Every `lock()`/`wait()` call eventually settles (resolves or rejects) — no hang, bounded by a
+ *      per-call watchdog that throws loudly instead of hanging forever.
+ *   3. `wait()` never rejects with something other than the abort reason, and never resolves after the
+ *      condition was disposed mid-wait.
+ *   4. `awaitShielded` always rejects on abort (even pre-aborted) and the shielded work always runs to
+ *      completion in the background regardless of the caller's outcome.
+ *   5. No unhandled promise rejections escape a run.
  */
 import assert from "node:assert/strict";
+import fc from "fast-check";
 import { AsyncCondition, awaitShielded } from "../src/pools/async-primitives.js";
 
-/**
- * Tiny byte-cursor reader over the fuzz input, replacing the old mulberry32 PRNG: each read
- * consumes bytes from the front and falls back to 0 once exhausted, so jsfuzz's coverage-guided
- * mutations (grow/shrink/flip bytes) map onto the same decisions (task count, abort timing,
- * wait vs. no-wait, ...) the PRNG used to make.
- */
-class ByteCursor {
-  private offset = 0;
-
-  constructor(private readonly buf: Buffer) {}
-
-  /** Next raw byte (0 once exhausted). */
-  byte(): number {
-    if (this.offset >= this.buf.length) return 0;
-    return this.buf[this.offset++] ?? 0;
-  }
-
-  /** A float in [0, 1), the drop-in replacement for `rng()`. */
-  float(): number {
-    return this.byte() / 256;
-  }
-
-  /** An integer in [0, max). */
-  int(max: number): number {
-    return Math.floor(this.float() * max);
-  }
-
-  /** True with probability `p` (0..1). */
-  chance(p: number): boolean {
-    return this.float() < p;
-  }
+interface TaskPlan {
+  willAbort: boolean;
+  abortDelayMs: number; // 0..4
+  doWait: boolean;
+  withTimeout: boolean; // when waiting, park with a short timeout instead of indefinitely
+  notify: boolean; // after releasing, re-lock and notify a potential waiter
+  notifyCount: number; // 1..2
 }
+
+interface Scenario {
+  tasks: TaskPlan[]; // 2..4 concurrent tasks
+  shieldWorkDelayMs: number; // 0..2
+  shieldPreAbort: boolean; // abort before awaitShielded is even called
+  shieldAbortAfter: boolean; // otherwise, maybe abort mid-flight
+  shieldAbortDelayMs: number; // 0..2
+}
+
+const taskArb: fc.Arbitrary<TaskPlan> = fc.record({
+  willAbort: fc.boolean(),
+  abortDelayMs: fc.integer({ min: 0, max: 4 }),
+  doWait: fc.boolean(),
+  withTimeout: fc.boolean(),
+  notify: fc.boolean(),
+  notifyCount: fc.integer({ min: 1, max: 2 }),
+});
+
+const scenarioArb: fc.Arbitrary<Scenario> = fc.record({
+  tasks: fc.array(taskArb, { minLength: 2, maxLength: 4 }),
+  shieldWorkDelayMs: fc.integer({ min: 0, max: 2 }),
+  shieldPreAbort: fc.boolean(),
+  shieldAbortAfter: fc.boolean(),
+  shieldAbortDelayMs: fc.integer({ min: 0, max: 2 }),
+});
 
 function withWatchdog<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -82,22 +80,17 @@ process.on("unhandledRejection", (reason) => {
   unhandled.push(reason);
 });
 
-/**
- * One fuzzed run: spawns a handful of concurrent "tasks" that each race lock/wait against
- * abort, driven by the byte cursor. Mirrors the invariants the old PRNG-driven runOne asserted.
- */
-async function runOne(cur: ByteCursor): Promise<void> {
+/** One scenario: spawns the planned concurrent tasks racing lock/wait against abort, then drives
+ * awaitShielded. Mirrors the invariants the old PRNG-driven runOne asserted. */
+async function runOne(scenario: Scenario): Promise<void> {
   const cond = new AsyncCondition();
-  const taskCount = 2 + cur.int(3); // 2..4 concurrent tasks
   let insideCriticalSection = 0;
   const results: Array<"ok" | "aborted" | "timeout"> = [];
 
-  const tasks = Array.from({ length: taskCount }, async (_, i) => {
+  const tasks = scenario.tasks.map(async (plan, i) => {
     const ctrl = new AbortController();
-    const willAbort = cur.chance(0.3);
-    const abortDelayMs = cur.int(5);
-    if (willAbort) {
-      setTimeout(() => ctrl.abort(), abortDelayMs);
+    if (plan.willAbort) {
+      setTimeout(() => ctrl.abort(), plan.abortDelayMs);
     }
 
     try {
@@ -112,10 +105,10 @@ async function runOne(cur: ByteCursor): Promise<void> {
     assert.equal(insideCriticalSection, 1, "more than one holder inside the critical section");
 
     try {
-      if (cur.chance(0.5)) {
-        const timeoutSeconds = cur.chance(0.5) ? cur.float() * 0.002 : null;
-        // wait() releases the lock internally while parked, then re-acquires it before
-        // returning — so the critical-section counter must drop around the call, not after it.
+      if (plan.doWait) {
+        const timeoutSeconds = plan.withTimeout ? 0.001 : null;
+        // wait() releases the lock internally while parked, then re-acquires it before returning —
+        // so the critical-section counter must drop around the call, not after it.
         insideCriticalSection -= 1;
         let notified: boolean;
         try {
@@ -136,10 +129,10 @@ async function runOne(cur: ByteCursor): Promise<void> {
     }
 
     // notify a potential waiter so wait() paths get exercised too
-    if (cur.chance(0.5)) {
+    if (plan.notify) {
       try {
         await withWatchdog(cond.lock(), 1000, `task${i}.notifylock`);
-        cond.notify(1 + cur.int(2));
+        cond.notify(plan.notifyCount);
         cond.unlock();
       } catch {
         // lock() without a signal never rejects; unreachable, kept for defense in depth.
@@ -155,16 +148,17 @@ async function runOne(cur: ByteCursor): Promise<void> {
 
   // awaitShielded: background work must always finish even when the caller is cancelled.
   let shieldedWorkDone = false;
-  const work = new Promise<void>((resolve) => setTimeout(() => {
-    shieldedWorkDone = true;
-    resolve();
-  }, cur.int(3)));
+  const work = new Promise<void>((resolve) =>
+    setTimeout(() => {
+      shieldedWorkDone = true;
+      resolve();
+    }, scenario.shieldWorkDelayMs),
+  );
   const shieldCtrl = new AbortController();
-  const preAbort = cur.chance(0.3);
-  if (preAbort) {
+  if (scenario.shieldPreAbort) {
     shieldCtrl.abort();
-  } else if (cur.chance(0.5)) {
-    setTimeout(() => shieldCtrl.abort(), cur.int(3));
+  } else if (scenario.shieldAbortAfter) {
+    setTimeout(() => shieldCtrl.abort(), scenario.shieldAbortDelayMs);
   }
   try {
     await withWatchdog(awaitShielded(work, shieldCtrl.signal), 1000, "awaitShielded");
@@ -175,11 +169,63 @@ async function runOne(cur: ByteCursor): Promise<void> {
   assert.ok(shieldedWorkDone, "shielded work did not run to completion after cancellation");
 }
 
-/** jsfuzz's target contract: `export function fuzz(buf: Buffer)`, called once per generated input. */
-export async function fuzz(buf: Buffer): Promise<void> {
-  unhandled = [];
-  await runOne(new ByteCursor(buf));
-  if (unhandled.length > 0) {
-    throw new Error(`unhandled rejection(s): ${unhandled.map(String).join(", ")}`);
-  }
+function parseArgs(): { seed: number; numRuns: number; maxSeconds: number } {
+  const args = Object.fromEntries(
+    process.argv.slice(2).map((a) => {
+      const [k, v] = a.replace(/^--/, "").split("=");
+      return [k, v];
+    }),
+  );
+  return {
+    // A concrete seed is always chosen (and logged) so every run reproduces via --seed.
+    seed: Number(args.seed ?? Date.now() & 0xffffffff),
+    // Default kept modest so a local run finishes in well under a minute — some scenarios wait on a
+    // notify that never comes and only settle at the 1s watchdog, so each run averages ~170ms. CI
+    // drives far more via --max-seconds; crank --num-runs locally for a longer soak.
+    numRuns: Number(args["num-runs"] ?? 200),
+    maxSeconds: Number(args["max-seconds"] ?? 0), // 0 = run the full numRuns, no time bound
+  };
 }
+
+async function main(): Promise<void> {
+  const { seed, numRuns, maxSeconds } = parseArgs();
+  console.log(
+    `fuzzing AsyncCondition/awaitShielded: num-runs=${numRuns}` +
+      `${maxSeconds > 0 ? ` max-seconds=${maxSeconds}` : ""} seed=${seed}`,
+  );
+
+  // Liveness: fast-check emits nothing per run, so a long CI budget would print a silent console
+  // that looks hung. Log progress every couple of seconds, like the other languages' fuzzers do.
+  let runs = 0;
+  let finished = false;
+  let lastLog = Date.now();
+  await fc.assert(
+    fc.asyncProperty(scenarioArb, async (scenario) => {
+      unhandled = [];
+      await runOne(scenario);
+      if (unhandled.length > 0) {
+        throw new Error(`unhandled rejection(s): ${unhandled.map(String).join(", ")}`);
+      }
+      runs += 1;
+      // `finished` guards against a run still in flight when the time budget interrupts fc.assert
+      // logging a stray line after the final summary.
+      if (!finished && Date.now() - lastLog >= 2000) {
+        console.log(`... ${runs} runs ok`);
+        lastLog = Date.now();
+      }
+    }),
+    {
+      seed,
+      numRuns,
+      // A wall-clock budget: stop after this many ms and treat hitting it as success (not a failure),
+      // so CI can "fuzz for N seconds" without the old timeout/exit-code dance.
+      interruptAfterTimeLimit: maxSeconds > 0 ? maxSeconds * 1000 : undefined,
+      markInterruptAsFailure: false,
+    },
+  );
+
+  finished = true;
+  console.log(`ok: ${runs} runs, no invariant violations, no unhandled rejections (seed=${seed})`);
+}
+
+await main();
