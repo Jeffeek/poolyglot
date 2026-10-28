@@ -16,13 +16,17 @@ Node 22+. `fast-check` and `tsx` are already dev dependencies (`npm install`).
 ## Run
 
 ```bash
-npm run fuzz                                       # 1000 runs
-npm run fuzz -- --num-runs=20000 --seed=42         # more runs, fixed seed
+npm run fuzz                                       # 200 runs (~35s)
+npm run fuzz -- --num-runs=20000 --seed=42         # longer soak, fixed seed
 npm run fuzz -- --max-seconds=120                  # run for a wall-clock budget instead
 ```
 
-A concrete seed is always chosen and printed, so any run reproduces exactly via `--seed=<n>`. On a
+A concrete seed is always chosen and printed, so any run reproduces exactly via `--seed=<n>`, and
+progress is logged every couple of seconds (`... N runs ok`) so a long run never looks hung. On a
 failure fast-check **shrinks** to a minimal counterexample and prints it alongside the seed.
+
+The default run count is modest on purpose: some scenarios wait on a notify that never arrives and
+only settle at the 1s watchdog (~170ms/run average), so CI drives the volume via `--max-seconds`.
 
 A failure is any asserted invariant breaking — a mutual-exclusion violation, a hang caught by the
 per-call watchdog, an unexpected `wait()` rejection, or an unhandled promise rejection — all of

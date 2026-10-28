@@ -179,7 +179,10 @@ function parseArgs(): { seed: number; numRuns: number; maxSeconds: number } {
   return {
     // A concrete seed is always chosen (and logged) so every run reproduces via --seed.
     seed: Number(args.seed ?? Date.now() & 0xffffffff),
-    numRuns: Number(args["num-runs"] ?? 1000),
+    // Default kept modest so a local run finishes in well under a minute — some scenarios wait on a
+    // notify that never comes and only settle at the 1s watchdog, so each run averages ~170ms. CI
+    // drives far more via --max-seconds; crank --num-runs locally for a longer soak.
+    numRuns: Number(args["num-runs"] ?? 200),
     maxSeconds: Number(args["max-seconds"] ?? 0), // 0 = run the full numRuns, no time bound
   };
 }
@@ -191,12 +194,24 @@ async function main(): Promise<void> {
       `${maxSeconds > 0 ? ` max-seconds=${maxSeconds}` : ""} seed=${seed}`,
   );
 
+  // Liveness: fast-check emits nothing per run, so a long CI budget would print a silent console
+  // that looks hung. Log progress every couple of seconds, like the other languages' fuzzers do.
+  let runs = 0;
+  let finished = false;
+  let lastLog = Date.now();
   await fc.assert(
     fc.asyncProperty(scenarioArb, async (scenario) => {
       unhandled = [];
       await runOne(scenario);
       if (unhandled.length > 0) {
         throw new Error(`unhandled rejection(s): ${unhandled.map(String).join(", ")}`);
+      }
+      runs += 1;
+      // `finished` guards against a run still in flight when the time budget interrupts fc.assert
+      // logging a stray line after the final summary.
+      if (!finished && Date.now() - lastLog >= 2000) {
+        console.log(`... ${runs} runs ok`);
+        lastLog = Date.now();
       }
     }),
     {
@@ -209,7 +224,8 @@ async function main(): Promise<void> {
     },
   );
 
-  console.log(`ok: no invariant violations, no unhandled rejections (seed=${seed})`);
+  finished = true;
+  console.log(`ok: ${runs} runs, no invariant violations, no unhandled rejections (seed=${seed})`);
 }
 
 await main();
