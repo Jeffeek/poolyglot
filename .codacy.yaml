@@ -1,8 +1,28 @@
 ---
-# Exclude machine-generated dependency manifests from analysis. These are produced by
-# tooling (npm, uv/pip-compile), not hand-authored, so size/complexity findings on them
-# are noise — e.g. "package-lock.json has N non-comment lines".
+# Codacy path excludes. NOTE: this file configures tools and paths but CANNOT
+# enable/disable tools — that is done in the Codacy UI (Code patterns). See the
+# "making Codacy smart" notes: the bulk of noise came from tools the repo
+# deliberately replaced (ESLint→Biome, Prospector/Pylint/Bandit→Ruff, PMD→SpotBugs,
+# Revive→golangci-lint, plus SonarC#/Lizard), which are turned off in the UI.
 exclude_paths:
+  # Machine-generated dependency manifests. Produced by tooling (npm, uv/pip-compile),
+  # not hand-authored, so size/complexity findings on them are noise.
   - "**/package-lock.json"
   - "python/requirements-dev.txt"
   - "python/requirements-release.txt"
+
+  # Non-shipped code. examples/, tests, and fuzz harnesses are not part of any
+  # published library, so static-analysis and security findings on them (SQLi in a
+  # SQLite demo, asserts in tests, eval in a fuzz harness, weak RNG in property tests)
+  # are noise — they never reach a consumer.
+  - "**/examples/**"
+  - "**/tests/**"
+  - "**/test/**"
+  - "**/fuzz/**"
+  - "**/*_test.go"
+
+  # go.mod is a zero-dependency module file (the Go library is dependency-free by
+  # design). Trivy misreads the `go 1.21` directive as a pinned vulnerable stdlib and
+  # floods ~40 CVEs that no consumer is actually exposed to. Re-include this line if a
+  # real third-party `require` is ever added to the module.
+  - "go/go.mod"

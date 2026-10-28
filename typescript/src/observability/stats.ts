@@ -16,6 +16,7 @@ export function percentile(sortedValues: number[], q: number): number {
   const k = (sortedValues.length - 1) * q;
   const lo = Math.floor(k);
   const hi = Math.min(lo + 1, sortedValues.length - 1);
+  // biome-ignore lint/style/noNonNullAssertion: lo/hi provably in-bounds (length>0 above, both clamped to [0,length-1]); the assertions only satisfy noUncheckedIndexedAccess
   return sortedValues[lo]! + (sortedValues[hi]! - sortedValues[lo]!) * (k - lo);
 }
 

@@ -99,7 +99,7 @@ export class AsyncCondition {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let onAbort: (() => void) | undefined;
     let notified = false;
-    let aborted = false;
+    let abortedSignal: AbortSignal | undefined;
     try {
       await new Promise<void>((resolve) => {
         waiter.wake = () => {
@@ -110,16 +110,17 @@ export class AsyncCondition {
           timer = setTimeout(resolve, Math.max(0, timeoutSeconds) * 1000);
         }
         if (signal) {
-          if (signal.aborted) {
-            aborted = true;
+          const sig = signal;
+          if (sig.aborted) {
+            abortedSignal = sig;
             resolve();
             return;
           }
           onAbort = () => {
-            aborted = true;
+            abortedSignal = sig;
             resolve();
           };
-          signal.addEventListener("abort", onAbort, { once: true });
+          sig.addEventListener("abort", onAbort, { once: true });
         }
       });
     } finally {
@@ -132,8 +133,8 @@ export class AsyncCondition {
       this.condWaiters.delete(waiter);
       await this.reacquire();
     }
-    if (aborted) {
-      throw abortError(signal!);
+    if (abortedSignal) {
+      throw abortError(abortedSignal);
     }
     return notified;
   }
