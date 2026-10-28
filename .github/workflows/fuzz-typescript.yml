@@ -42,4 +42,6 @@ jobs:
           FUZZ_SECONDS: ${{ github.event.inputs.fuzz-seconds || '120' }}
         run: |
           case "$FUZZ_SECONDS" in ''|*[!0-9]*) echo "fuzz-seconds must be a positive integer" >&2; exit 1 ;; esac
-          npx tsx fuzz/async-primitives.fuzz.ts --iterations=100000000 --max-seconds="$FUZZ_SECONDS" --seed="$RANDOM"
+          # fast-check's --max-seconds (interruptAfterTimeLimit) stops after the budget and exits 0;
+          # only a real invariant violation exits non-zero, so no timeout wrapper is needed.
+          npm run fuzz -- --num-runs=100000000 --max-seconds="$FUZZ_SECONDS" --seed="$RANDOM"

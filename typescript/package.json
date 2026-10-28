@@ -59,12 +59,14 @@
     "format": "biome format --write ./src ./test",
     "format:check": "biome format ./src ./test",
     "test": "bash run_tests.sh",
+    "fuzz": "tsx fuzz/async-primitives.fuzz.ts",
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.3",
     "@types/node": "^26.6.5",
     "c8": "^12.0.0",
+    "fast-check": "^4.10.2",
     "tsup": "^9.0.0",
     "tsx": "^4.19.2",
     "typescript": "^7.0.2"
