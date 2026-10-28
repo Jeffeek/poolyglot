@@ -118,6 +118,7 @@ namespace ConnPool
             _maintCts.Cancel();
             if (_task != null)
                 await _task.ConfigureAwait(false); // the loop swallows its own errors, so this never faults
+            _maintCts.Dispose();
             foreach (var pooled in idle)
                 await Destroy(pooled, CloseReason.PoolClosed).ConfigureAwait(false);
         }
