@@ -19,9 +19,14 @@ from __future__ import annotations
 
 import random
 import sqlite3
+import sys
 import tempfile
 import time
+from pathlib import Path
 from typing import Any
+
+# Add examples/database to path for dbapi_factory
+sys.path.insert(0, str(Path(__file__).parent.parent / "database"))
 
 from connpool import (
     BreakerConfig,
@@ -71,8 +76,8 @@ class BreakerAlertListener(PoolListener):
                 print(f"✅ {self.region} circuit breaker CLOSED (region recovered)")
 
 
-def create_pool_for_region(region: str) -> ConnectionPool:
-    """Factory function: creates a pool for the given region with circuit breaker."""
+def create_factory_for_region(region: str) -> DbApiFactory:
+    """Factory function: returns a connection factory for the given region."""
     # Simulate regional health:
     # us-east-1: initially healthy, will be made unhealthy later
     # us-west-2: always healthy (backup region)
@@ -80,28 +85,12 @@ def create_pool_for_region(region: str) -> ConnectionPool:
 
     regional_db = RegionalDatabase(region, failure_rate)
 
-    config = PoolConfig(
-        min_size=1,
-        max_size=5,
-        acquire_timeout=3.0,
-        max_lifetime=300,
-        # Circuit breaker config: open after 3 failures, recover after 10s
-        breaker=BreakerConfig(
-            failure_threshold=3,  # Open after 3 consecutive creation failures
-            recovery_timeout=10.0,  # Try recovery after 10s
-            half_open_max_calls=2,  # Probe with 2 calls during recovery
-        ),
-        # Retry once before giving up (breaker counts this as 1 failure)
-        retry=RetryPolicy(max_attempts=2, base_delay=0.1),
-    )
+    print(f"Creating factory for {region}")
 
-    factory = DbApiFactory(regional_db.create_connection)
-    listener = BreakerAlertListener(region)
-
-    return ConnectionPool(factory, config, name=f"region-{region}", listeners=[listener])
+    return DbApiFactory(regional_db.create_connection)
 
 
-def execute_query_with_failover(registry: PoolRegistry, query: str) -> dict[str, Any]:
+def execute_query_with_failover(pools: dict[str, ConnectionPool], query: str) -> dict[str, Any]:
     """Execute a query with regional failover.
 
     Try primary region first; if breaker is open or connection fails, try secondary.
@@ -113,7 +102,7 @@ def execute_query_with_failover(registry: PoolRegistry, query: str) -> dict[str,
 
     # Try primary region
     try:
-        with registry.connection(primary) as conn:
+        with pools[primary].connection() as conn:
             result = conn.execute(query).fetchone()
             elapsed = time.time() - start
             return {
@@ -127,7 +116,7 @@ def execute_query_with_failover(registry: PoolRegistry, query: str) -> dict[str,
 
         # Fallback to secondary region
         try:
-            with registry.connection(secondary) as conn:
+            with pools[secondary].connection() as conn:
                 result = conn.execute(query).fetchone()
                 elapsed = time.time() - start
                 print(f"✅ Failover to {secondary} succeeded")
@@ -150,19 +139,40 @@ def execute_query_with_failover(registry: PoolRegistry, query: str) -> dict[str,
 if __name__ == "__main__":
     print("=== Regional Failover Demo ===\n")
 
-    # Create per-region pool registry
-    regions = PoolRegistry(create_pool_for_region)
+    # Shared pool config for all regions
+    shared_config = PoolConfig(
+        min_size=1,
+        max_size=5,
+        acquire_timeout=3.0,
+        max_lifetime=300,
+        # Circuit breaker config: open after 3 failures, recover after 10s
+        breaker=BreakerConfig(
+            failure_threshold=3,  # Open after 3 consecutive creation failures
+            recovery_timeout=10.0,  # Try recovery after 10s
+            half_open_max_calls=2,  # Probe with 2 calls during recovery
+        ),
+        # Retry once before giving up (breaker counts this as 1 failure)
+        retry=RetryPolicy(max_attempts=2, base_delay=0.1),
+    )
+
+    # Create per-region pools directly (not using PoolRegistry since we need per-pool listeners)
+    pools: dict[str, ConnectionPool] = {}
+    for region in ["us-east-1", "us-west-2"]:
+        print(f"Creating pool for {region}")
+        factory = create_factory_for_region(region)
+        listener = BreakerAlertListener(region)
+        pools[region] = ConnectionPool(factory, shared_config, listeners=[listener], name=region)
 
     # Initialize databases
     for region in ["us-east-1", "us-west-2"]:
-        with regions.connection(region) as conn:
+        with pools[region].connection() as conn:
             conn.execute("CREATE TABLE IF NOT EXISTS metrics (ts INTEGER, value REAL)")
             conn.execute("INSERT INTO metrics VALUES (?, ?)", (int(time.time()), 42.0))
             conn.commit()
 
     print("Phase 1: Both regions healthy\n")
     for i in range(3):
-        result = execute_query_with_failover(regions, "SELECT COUNT(*) FROM metrics")
+        result = execute_query_with_failover(pools, "SELECT COUNT(*) FROM metrics")
         print(f"Request {i+1}: {result['region']} - {result['status']} ({result['elapsed']:.3f}s)")
         time.sleep(0.5)
 
@@ -172,7 +182,7 @@ if __name__ == "__main__":
 
     # Simulate primary region becoming unhealthy
     # (In production, this would happen naturally due to network/DB issues)
-    primary_pool = regions.pool("us-east-1")
+    primary_pool = pools["us-east-1"]
     # Access internal state to inject failures (demo only - don't do this in production)
     # We'll just manually fail some requests to trigger the breaker
 
@@ -197,7 +207,7 @@ if __name__ == "__main__":
                 return True
 
         # This is just for demo - we'll use the normal failover path
-        result = execute_query_with_failover(regions, "SELECT COUNT(*) FROM metrics")
+        result = execute_query_with_failover(pools, "SELECT COUNT(*) FROM metrics")
         print(f"Request {i+1}: {result['region']} - {result['status']}")
         time.sleep(0.5)
 
@@ -207,22 +217,23 @@ if __name__ == "__main__":
 
     # Now requests should fail fast and immediately use secondary
     for i in range(3):
-        result = execute_query_with_failover(regions, "SELECT COUNT(*) FROM metrics")
+        result = execute_query_with_failover(pools, "SELECT COUNT(*) FROM metrics")
         print(f"Request {i+1}: {result['region']} - {result['status']} ({result['elapsed']:.3f}s)")
         print(f"  (Notice fast failover - no slow connection attempts)")
         time.sleep(0.5)
 
     print("\n=== Pool Statistics ===\n")
     for region in ["us-east-1", "us-west-2"]:
-        pool = regions.pool(region)
+        pool = pools[region]
         stats = pool.stats()
         print(f"{region}:")
-        print(f"  Breaker state: {stats['breaker_state']}")
-        print(f"  Total created: {stats['created']}")
-        print(f"  Total closed: {stats['closed']}")
-        print(f"  Size/max: {stats['size']}/{stats['max_size']}")
-        print(f"  Acquire wait p95: {stats['acquire_wait_p95']:.3f}s\n")
+        print(f"  Breaker state: {stats.breaker_state}")
+        print(f"  Total created: {stats.created}")
+        print(f"  Total closed: {stats.closed}")
+        print(f"  Size/max: {stats.size}/{stats.max_size}")
+        print(f"  Acquire wait p95: {stats.p95_acquire_wait:.3f}s\n")
 
-    regions.close()
+    for pool in pools.values():
+        pool.close()
     print("=== Demo complete ===")
     print("Key takeaway: Circuit breaker enables fast failover without waiting for timeouts.")

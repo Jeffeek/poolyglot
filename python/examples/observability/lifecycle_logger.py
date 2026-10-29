@@ -48,7 +48,7 @@ class LifecycleLogger(PoolListener):
         self.connection_birth_times[conn_id] = time.time()
         log.info(
             f"[{self.pool_name}] Connection #{conn_id} CREATED in {duration:.3f}s "
-            f"(lifetime={conn.lifetime:.1f}s, uses={conn.uses})"
+            f"(lifetime={conn.age(time.time()):.1f}s, uses={conn.use_count})"
         )
 
     def on_connection_closed(self, conn: PooledConnection[Any], reason: CloseReason) -> None:
@@ -59,7 +59,7 @@ class LifecycleLogger(PoolListener):
 
         log.info(
             f"[{self.pool_name}] Connection #{conn_id} CLOSED after {age:.1f}s "
-            f"(reason={reason.value}, lifetime={conn.lifetime:.1f}s, uses={conn.uses})"
+            f"(reason={reason.value}, lifetime={conn.age(time.time()):.1f}s, uses={conn.use_count})"
         )
 
     def on_create_failed(self, error: BaseException) -> None:
@@ -77,7 +77,7 @@ class LifecycleLogger(PoolListener):
         else:
             log.debug(
                 f"[{self.pool_name}] Connection #{conn_id} ACQUIRED (wait={wait_time:.3f}s, "
-                f"age={conn.lifetime:.1f}s, uses={conn.uses})"
+                f"age={conn.age(time.time()):.1f}s, uses={conn.use_count})"
             )
 
     def on_released(self, conn: PooledConnection[Any], hold_time: float) -> None:
@@ -91,7 +91,7 @@ class LifecycleLogger(PoolListener):
         else:
             log.debug(
                 f"[{self.pool_name}] Connection #{conn_id} RELEASED (held={hold_time:.3f}s, "
-                f"age={conn.lifetime:.1f}s, uses={conn.uses})"
+                f"age={conn.age(time.time()):.1f}s, uses={conn.use_count})"
             )
 
     def on_acquire_timeout(self, waited: float) -> None:
@@ -106,7 +106,7 @@ class LifecycleLogger(PoolListener):
         conn_id = conn.id
         log.error(
             f"[{self.pool_name}] CONNECTION LEAK DETECTED: #{conn_id} held for {held_for:.1f}s "
-            f"(age={conn.lifetime:.1f}s, uses={conn.uses}) - caller did not release!"
+            f"(age={conn.age(time.time()):.1f}s, uses={conn.use_count}) - caller did not release!"
         )
 
     def on_breaker_state_change(self, old: BreakerState, new: BreakerState) -> None:
@@ -131,7 +131,12 @@ class LifecycleLogger(PoolListener):
 # Example usage
 if __name__ == "__main__":
     import sqlite3
+    import sys
     from concurrent.futures import ThreadPoolExecutor
+    from pathlib import Path
+
+    # Add examples/database to path for dbapi_factory
+    sys.path.insert(0, str(Path(__file__).parent.parent / "database"))
 
     from connpool import ConnectionPool, PoolConfig
     from dbapi_factory import DbApiFactory
@@ -173,7 +178,7 @@ if __name__ == "__main__":
         log.info("\n--- Scenario 3: Leak detection (simulated) ---")
         # Acquire without releasing (within context manager to avoid actual leak)
         conn = pool.acquire()
-        log.info(f"Acquired connection #{conn.id}, sleeping for 4s (will trigger leak warning)...")
+        log.info("Acquired connection, sleeping for 4s (will trigger leak warning)...")
         time.sleep(4)  # Longer than leak_detection_timeout (3s)
         pool.release(conn)
 

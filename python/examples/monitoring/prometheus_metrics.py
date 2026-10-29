@@ -19,7 +19,7 @@ import time
 from collections import defaultdict
 from typing import Any
 
-from connpool import BreakerState, CloseReason, PoolListener, PooledConnection
+from connpool import BreakerState, CloseReason, PoolListener, PooledConnection, PoolStats
 
 log = logging.getLogger(__name__)
 
@@ -93,26 +93,26 @@ class PrometheusMetrics(PoolListener):
             f"(state: {old.value} -> {new.value})"
         )
 
-    def export_gauges(self, stats: dict[str, Any]) -> list[str]:
+    def export_gauges(self, stats: PoolStats) -> list[str]:
         """Convert PoolStats snapshot to Prometheus gauge format.
 
         Call this periodically (e.g., every 15s) and push to your metrics backend.
         """
         lines = [
             # Pool sizes
-            f"connpool_size{{pool=\"{self.pool_name}\"}} {stats['size']}",
-            f"connpool_idle{{pool=\"{self.pool_name}\"}} {stats['idle']}",
-            f"connpool_in_use{{pool=\"{self.pool_name}\"}} {stats['in_use']}",
-            f"connpool_waiting{{pool=\"{self.pool_name}\"}} {stats['waiting']}",
-            f"connpool_max_size{{pool=\"{self.pool_name}\"}} {stats['max_size']}",
+            f"connpool_size{{pool=\"{self.pool_name}\"}} {stats.size}",
+            f"connpool_idle{{pool=\"{self.pool_name}\"}} {stats.idle}",
+            f"connpool_in_use{{pool=\"{self.pool_name}\"}} {stats.in_use}",
+            f"connpool_waiting{{pool=\"{self.pool_name}\"}} {stats.waiting}",
+            f"connpool_max_size{{pool=\"{self.pool_name}\"}} {stats.max_size}",
             # Acquire-wait percentiles (seconds)
-            f"connpool_acquire_wait_p50{{pool=\"{self.pool_name}\"}} {stats['acquire_wait_p50']}",
-            f"connpool_acquire_wait_p95{{pool=\"{self.pool_name}\"}} {stats['acquire_wait_p95']}",
-            f"connpool_acquire_wait_p99{{pool=\"{self.pool_name}\"}} {stats['acquire_wait_p99']}",
+            f"connpool_acquire_wait_p50{{pool=\"{self.pool_name}\"}} {stats.p50_acquire_wait}",
+            f"connpool_acquire_wait_p95{{pool=\"{self.pool_name}\"}} {stats.p95_acquire_wait}",
+            f"connpool_acquire_wait_p99{{pool=\"{self.pool_name}\"}} {stats.p99_acquire_wait}",
             # Create-latency percentiles (seconds)
-            f"connpool_create_latency_p50{{pool=\"{self.pool_name}\"}} {stats['create_latency_p50']}",
-            f"connpool_create_latency_p95{{pool=\"{self.pool_name}\"}} {stats['create_latency_p95']}",
-            f"connpool_create_latency_p99{{pool=\"{self.pool_name}\"}} {stats['create_latency_p99']}",
+            f"connpool_create_latency_p50{{pool=\"{self.pool_name}\"}} {stats.p50_create_latency}",
+            f"connpool_create_latency_p95{{pool=\"{self.pool_name}\"}} {stats.p95_create_latency}",
+            f"connpool_create_latency_p99{{pool=\"{self.pool_name}\"}} {stats.p99_create_latency}",
             # Circuit breaker state (0=closed, 1=open, 2=half_open)
             f"connpool_breaker_state{{pool=\"{self.pool_name}\"}} {self._breaker_state_value(self.breaker_state_current)}",
         ]
@@ -127,6 +127,12 @@ class PrometheusMetrics(PoolListener):
 # Example usage
 if __name__ == "__main__":
     import sqlite3
+    import sys
+    from pathlib import Path
+
+    # Add examples/database to path for dbapi_factory
+    sys.path.insert(0, str(Path(__file__).parent.parent / "database"))
+
     from connpool import ConnectionPool, PoolConfig
     from dbapi_factory import DbApiFactory
 

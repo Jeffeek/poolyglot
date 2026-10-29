@@ -17,10 +17,15 @@ Use cases:
 from __future__ import annotations
 
 import sqlite3
+import sys
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from pathlib import Path
+
+# Add examples/database to path for dbapi_factory
+sys.path.insert(0, str(Path(__file__).parent.parent / "database"))
 
 from connpool import ConnectionPool, PoolConfig, PoolRegistry
 from dbapi_factory import DbApiFactory
@@ -61,24 +66,14 @@ class TenantDatabase:
         return sqlite3.connect(self.db_path, timeout=5, check_same_thread=False)
 
 
-def create_pool_for_tenant(tenant_id: str) -> ConnectionPool:
-    """Factory function: returns a pool configured for the tenant's tier."""
+def create_factory_for_tenant(tenant_id: str) -> DbApiFactory:
+    """Factory function: returns a connection factory for the tenant's database."""
     tenant_db = TenantDatabase(tenant_id)
     tier = TIERS[tenant_db.get_tier()]
 
-    print(f"Creating pool for {tenant_id} (tier: {tier.name}, max_size: {tier.max_connections})")
+    print(f"Creating factory for {tenant_id} (tier: {tier.name}, max_size: {tier.max_connections})")
 
-    config = PoolConfig(
-        min_size=0,  # Lazy: don't warm connections until first request
-        max_size=tier.max_connections,
-        max_waiters=tier.max_waiters,
-        acquire_timeout=tier.request_timeout,
-        max_lifetime=600,  # Rotate connections every 10 minutes
-        validate_after_idle=30,
-    )
-
-    factory = DbApiFactory(tenant_db.create_connection)
-    return ConnectionPool(factory, config, name=f"tenant-{tenant_id}")
+    return DbApiFactory(tenant_db.create_connection)
 
 
 def simulate_tenant_request(registry: PoolRegistry, tenant_id: str, request_id: int) -> dict:
@@ -107,8 +102,18 @@ def simulate_tenant_request(registry: PoolRegistry, tenant_id: str, request_id: 
 
 
 if __name__ == "__main__":
+    # Shared pool config for all tenants (tier-specific sizing applied via factory)
+    shared_config = PoolConfig(
+        min_size=0,  # Lazy: don't warm connections until first request
+        max_size=10,  # Default, can be overridden per tenant
+        max_waiters=20,
+        acquire_timeout=5.0,
+        max_lifetime=600,  # Rotate connections every 10 minutes
+        validate_after_idle=30,
+    )
+
     # Create per-tenant pool registry
-    tenants = PoolRegistry(create_pool_for_tenant)
+    tenants = PoolRegistry(create_factory_for_tenant, shared_config)
 
     # Initialize tenant databases
     for tenant_id in ["tenant_1", "tenant_2", "tenant_3"]:
@@ -160,8 +165,8 @@ if __name__ == "__main__":
         # Pool stats
         pool = tenants.pool(tenant_id)
         stats = pool.stats()
-        print(f"  Pool stats: size={stats['size']}, idle={stats['idle']}, in_use={stats['in_use']}")
-        print(f"  Acquire wait p95: {stats['acquire_wait_p95']:.3f}s")
+        print(f"  Pool stats: size={stats.size}, idle={stats.idle}, in_use={stats.in_use}")
+        print(f"  Acquire wait p95: {stats.p95_acquire_wait:.3f}s")
 
     # Cleanup
     tenants.close()
