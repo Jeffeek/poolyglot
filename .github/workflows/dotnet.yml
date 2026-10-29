@@ -40,6 +40,10 @@ jobs:
         run: dotnet build src/ConnPool/ConnPool.csproj -c Release
       - name: Tests + coverage gate (100% line)
         run: bash run_tests.sh
+      - name: Build + run examples
+        run: |
+          dotnet build examples/examples.csproj -c Release
+          dotnet run --project examples --no-build -c Release --framework net8.0
 
       # run_tests.sh writes cobertura per target framework; flag=csharp keeps it separate
       # from the Python flag on Codecov.

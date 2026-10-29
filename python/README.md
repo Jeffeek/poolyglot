@@ -136,6 +136,111 @@ Examples importing `paramiko` or `psycopg` need those packages; the library neve
 * `acquire_wait` percentiles are estimated over the last 1024 samples (bounded memory), not the full history.
 * With `validate_idle` on, idle connections being pinged by the background sweep are briefly reserved and count as `in_use` (not `idle`) in `stats()` for the duration of that check — they are genuinely unavailable while validated, not borrowed by a caller.
 
+## When to use (and when not to)
+
+**Use a connection pool when:**
+
+* Creating connections is expensive (≥10ms network handshake, TLS negotiation, auth)
+* You make many requests over a connection's lifetime (reuse justifies overhead)
+* Backends impose connection limits (DB `max_connections`, API rate limits)
+* You need connection health checks or automatic retries
+
+**Don't pool when:**
+
+* Connection creation is cheap (<1ms). Example: in-memory SQLite (`:memory:`), local Unix sockets
+* Connections are single-use. Example: SMTP with no keep-alive, one-shot subprocess pipes
+* You have ≤1 concurrent request (no contention, just `create-and-close`)
+* Serverless functions (AWS Lambda, Cloud Functions) — pool setup cost > function lifetime; use the runtime's persistent connection cache instead
+
+**Use `PoolRegistry` (multiple pools) when:**
+
+* **Per-host HTTP keep-alive** — `PoolRegistry` keyed by hostname avoids head-of-line blocking (one slow host won't starve requests to fast hosts)
+
+  ```python
+  hosts = PoolRegistry(lambda host: HttpFactory(host), PoolConfig(max_size=8))
+  with hosts.connection("api.example.com") as conn: ...
+  ```
+
+* **Multi-tenant isolation** — separate `max_size` per tenant for quota enforcement
+
+  ```python
+  tenants = PoolRegistry(lambda tid: DbFactory(tid), PoolConfig(max_size=10))
+  ```
+
+* **Priority bulkheading** — interactive traffic gets a large pool, batch gets a small one
+* **Regional backends** — one pool per datacenter (`us-east-1`, `eu-west-1`) for failover
+
+**Common anti-patterns:**
+
+| Anti-pattern | Why it's wrong | Fix |
+| --- | --- | --- |
+| **One global pool for all backends** | Cross-backend contention: slow DB queries block HTTP API calls | Use `PoolRegistry` keyed by backend type/host |
+| **Pool in a Lambda handler** | Pool setup (min_size warm connections) > function cold-start time | Use `pymysql`/`psycopg` connection directly, or runtime-level connection pooler (RDS Proxy) |
+| **Undersized `max_size`** | 16 threads but `max_size=4` → 12 threads always wait | Set `max_size` ≥ peak concurrency |
+| **No `acquire_timeout`** | Infinite wait (default 30s is finite, but `None` = forever) masks backend outages | Set finite timeout (5-30s) and fail fast |
+| **Pooling stateful connections without `reset()`** | Transaction/session state bleeds between requests | Implement `factory.reset()` (rollback, clear session vars) |
+| **Using `requests.Session` inside pool** | Double-pooling (Session has its own connection pool) | Either pool raw `http.client` or use `Session` without poolyglot |
+
+## PoolRegistry patterns
+
+### Pattern 1: Per-host HTTP client
+
+```python
+from connpool import PoolRegistry, PoolConfig
+import http.client
+
+class HttpsFactory(ConnectionFactory[http.client.HTTPSConnection]):
+    def __init__(self, host):
+        self.host = host
+    def create(self):
+        conn = http.client.HTTPSConnection(self.host, timeout=5)
+        conn.connect()  # fail in create(), not in caller's request
+        return conn
+    def validate(self, conn):
+        return conn.sock is not None
+
+hosts = PoolRegistry(HttpsFactory, PoolConfig(max_size=8, max_lifetime=300))
+with hosts.connection("api.github.com") as conn:
+    conn.request("GET", "/")
+    print(conn.getresponse().status)
+```
+
+See `examples/http_client/keepalive_per_host.py` for a runnable version.
+
+### Pattern 2: Multi-tenant isolation
+
+```python
+# Different pool size per tier
+def factory_for_tenant(tenant_id: str):
+    tier = get_tenant_tier(tenant_id)  # "free" | "pro" | "enterprise"
+    config = {
+        "free": PoolConfig(max_size=2, max_waiters=5),
+        "pro": PoolConfig(max_size=10, max_waiters=20),
+        "enterprise": PoolConfig(max_size=50, max_waiters=100),
+    }[tier]
+    return ConnectionPool(DbFactory(tenant_id), config, name=f"tenant-{tenant_id}")
+
+tenants = PoolRegistry(factory_for_tenant)
+with tenants.connection(request.tenant_id) as db:
+    db.execute("SELECT ...")
+```
+
+### Pattern 3: Regional failover
+
+```python
+primary = PoolRegistry(lambda region: DbFactory(region), PoolConfig(max_size=20, breaker=BreakerConfig(...)))
+
+try:
+    with primary.connection("us-east-1") as db:
+        db.execute("SELECT ...")
+except PoolError:
+    # Circuit breaker open or pool exhausted
+    with primary.connection("us-west-2") as db:  # fallback region
+        db.execute("SELECT ...")
+```
+
+Use `on_breaker_state_change` listener to alert when primary region's breaker opens.
+
 ## Considered, not implemented
 
 These are deliberate scope decisions, not oversights. For most, something already in the

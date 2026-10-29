@@ -51,6 +51,13 @@ jobs:
       # run_tests.sh runs the suite under --all-features and writes lcov.info (gate: 100% lines).
       - name: Tests + coverage gate (100% lines)
         run: bash run_tests.sh
+      - name: Build + check examples
+        run: |
+          cargo build --examples
+          cargo run --example lifecycle_logger
+          cargo run --example multi_tenant
+          cargo run --example prometheus_metrics
+          cargo run --example regional_failover
 
       - name: Upload coverage to Codecov
         if: matrix.rust == '1.85.0'

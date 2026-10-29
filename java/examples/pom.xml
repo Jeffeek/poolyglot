@@ -8,7 +8,7 @@
 
     <groupId>io.github.jeffeek.examples</groupId>
     <artifactId>connpool-examples</artifactId>
-    <version>1.0.7</version>
+    <version>1.0.15</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -19,7 +19,7 @@
         <dependency>
             <groupId>io.github.jeffeek</groupId>
             <artifactId>connpool</artifactId>
-            <version>1.0.7</version>
+            <version>1.0.15</version>
         </dependency>
         <!-- A real example backend would add a driver here, e.g. org.xerial:sqlite-jdbc. -->
     </dependencies>

@@ -213,6 +213,163 @@ TypeScript 7 (what this package targets), while Biome has no dependency on the `
 * With `validateIdle` on, idle connections being pinged by the background sweep are briefly reserved and
   count as `inUse` (not `idle`) in `stats()` for the duration of that check.
 
+## When to use (and when not to)
+
+**Use a connection pool when:**
+
+* Creating connections is expensive (≥10ms network handshake, TLS negotiation, auth)
+* You make many requests over a connection's lifetime (reuse justifies overhead)
+* Backends impose connection limits (DB `max_connections`, API rate limits)
+* You need connection health checks or automatic retries
+
+**Don't pool when:**
+
+* Connection creation is cheap (<1ms). Example: in-memory SQLite, local Unix domain sockets
+* Connections are single-use. Example: SMTP without keep-alive, one-shot child processes
+* You have ≤1 concurrent request (no contention, just `create-and-close`)
+* Serverless functions (AWS Lambda, Vercel) — pool setup cost > function lifetime; use the runtime's persistent connection cache instead
+
+**Use `AsyncPoolRegistry` (multiple pools) when:**
+
+* **Per-host HTTP keep-alive** — `AsyncPoolRegistry` keyed by hostname avoids head-of-line blocking (one slow host won't starve requests to fast hosts)
+
+  ```typescript
+  const hosts = new AsyncPoolRegistry(
+      (host: string) => new HttpFactory(host),
+      { maxSize: 8 });
+  const conn = await hosts.connection("api.example.com");
+  try { /* use conn */ } finally { conn.release(); }
+  ```
+
+* **Multi-tenant isolation** — separate `maxSize` per tenant for quota enforcement
+
+  ```typescript
+  const tenants = new AsyncPoolRegistry(
+      (tenantId: string) => new DbFactory(tenantId),
+      { maxSize: 10 });
+  ```
+
+* **Priority bulkheading** — interactive traffic gets a large pool, batch gets a small one
+* **Regional backends** — one pool per datacenter (`us-east-1`, `eu-west-1`) for failover
+
+**Common anti-patterns:**
+
+| Anti-pattern | Why it's wrong | Fix |
+| --- | --- | --- |
+| **One global pool for all backends** | Cross-backend contention: slow DB queries block HTTP API calls | Use `AsyncPoolRegistry` keyed by backend type/host |
+| **Pool in a serverless function** | Pool setup (minSize warm connections) > function cold-start time | Use `node-postgres` `Pool` (has fast startup) or managed pooler (RDS Proxy, Supabase pooler) |
+| **Undersized `maxSize`** | High concurrency but `maxSize=4` → many requests always wait | Set `maxSize` ≥ peak concurrency |
+| **No `acquireTimeout`** | Infinite wait (default 30s is finite, but `null` = forever) masks backend outages | Set finite timeout (5-30s) and fail fast |
+| **Pooling stateful connections without `reset()`** | Transaction/session state bleeds between requests | Implement `factory.reset()` (rollback, clear session vars) |
+| **Pooling `axios` or `node-postgres` Pool** | They already have internal connection pooling | Use them directly, don't wrap in poolyglot |
+
+## AsyncPoolRegistry patterns
+
+### Pattern 1: Per-host HTTP keep-alive
+
+```typescript
+import { AsyncConnectionFactory, AsyncPoolRegistry, PoolConfig } from '@jeffeek/connpool';
+import http from 'node:http';
+
+class HttpFactory implements AsyncConnectionFactory<http.ClientRequest> {
+  constructor(private host: string) {}
+
+  async create(): Promise<http.ClientRequest> {
+    return new Promise((resolve, reject) => {
+      const req = http.request({ host: this.host, method: 'GET', path: '/' });
+      req.on('socket', (socket) => {
+        if (socket.connecting) {
+          socket.on('connect', () => resolve(req));
+        } else {
+          resolve(req);
+        }
+      });
+      req.on('error', reject);
+      setTimeout(() => reject(new Error('connect timeout')), 5000);
+    });
+  }
+
+  async validate(conn: http.ClientRequest): Promise<boolean> {
+    return conn.socket?.writable === true;
+  }
+
+  async close(conn: http.ClientRequest): Promise<void> {
+    conn.destroy();
+  }
+
+  isFatalError(exc: Error): boolean {
+    return exc.message.includes('ECONNREFUSED') || exc.message.includes('timeout');
+  }
+}
+
+const hosts = new AsyncPoolRegistry(
+  (host: string) => new HttpFactory(host),
+  { maxSize: 8, maxLifetime: 300, validateAfterIdle: 5 }
+);
+
+const conn = await hosts.connection("api.github.com");
+try {
+  // ... write request, read response ...
+} finally {
+  conn.release();
+}
+```
+
+### Pattern 2: Multi-tenant isolation
+
+```typescript
+// Different pool size per tier
+function factoryForTenant(tenantId: string): AsyncConnectionPool<DbConnection> {
+  const tier = getTenantTier(tenantId);  // "free" | "pro" | "enterprise"
+  const config: PoolConfig = 
+    tier === "free" ? { maxSize: 2, maxWaiters: 5 } :
+    tier === "pro" ? { maxSize: 10, maxWaiters: 20 } :
+    { maxSize: 50, maxWaiters: 100 };
+  
+  return new AsyncConnectionPool(new DbFactory(tenantId), config, `tenant-${tenantId}`);
+}
+
+const tenants = new AsyncPoolRegistry(factoryForTenant);
+
+const conn = await tenants.connection(request.tenantId);
+try {
+  // ... execute queries ...
+} finally {
+  conn.release();
+}
+```
+
+### Pattern 3: Regional failover
+
+```typescript
+const primary = new AsyncPoolRegistry(
+  (region: string) => new DbFactory(region),
+  { 
+    maxSize: 20, 
+    breaker: { failureThreshold: 5, recoveryTimeout: 30 }
+  }
+);
+
+try {
+  const conn = await primary.connection("us-east-1");
+  try {
+    await conn.value.execute("SELECT ...");
+  } finally {
+    conn.release();
+  }
+} catch (err) {
+  // Circuit breaker open or pool exhausted
+  const conn = await primary.connection("us-west-2");  // fallback region
+  try {
+    await conn.value.execute("SELECT ...");
+  } finally {
+    conn.release();
+  }
+}
+```
+
+Use `onBreakerStateChange` listener to alert when primary region's breaker opens.
+
 ## License
 
 MIT — see [LICENSE](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE).

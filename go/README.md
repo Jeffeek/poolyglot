@@ -185,6 +185,175 @@ gated; `gofmt` is warn-only. CI runs these as a separate `lint` job via `golangc
 * With `ValidateIdle` on, idle connections being pinged by the background sweep are briefly reserved and count as `InUse` (not `Idle`) in `Stats()` for the duration of that check.
 * Go's cover tool measures *statement* coverage (the gate is 100% statements), the nearest equivalent to the other languages' line + branch gate.
 
+## When to use (and when not to)
+
+**Use a connection pool when:**
+* Creating connections is expensive (≥10ms network handshake, TLS negotiation, auth)
+* You make many requests over a connection's lifetime (reuse justifies overhead)
+* Backends impose connection limits (DB `max_connections`, API rate limits)
+* You need connection health checks or automatic retries
+
+**Don't pool when:**
+* Connection creation is cheap (<1ms). Example: in-memory SQLite, local Unix domain sockets
+* Connections are single-use. Example: SMTP without keep-alive, one-shot exec.Command pipes
+* You have ≤1 concurrent goroutine (no contention, just `create-and-close`)
+* Short-lived Lambda/Cloud Run functions — pool setup cost > function lifetime; use the runtime's persistent connection cache instead
+
+**Use `PoolRegistry` (multiple pools) when:**
+* **Per-host HTTP client** — `PoolRegistry` keyed by hostname avoids head-of-line blocking (one slow host won't starve requests to fast hosts)
+
+  ```go
+  hosts := connpool.NewPoolRegistry(
+      func(host string) connpool.ConnectionFactory[*net.Conn] {
+          return &TcpFactory{host: host}
+      },
+      connpool.PoolConfig{MaxSize: connpool.Ptr(8)})
+  defer hosts.Close()
+  conn, release, _ := hosts.Connection(ctx, "api.example.com")
+  defer release(conn, false, nil)
+  ```
+
+* **Multi-tenant isolation** — separate `MaxSize` per tenant for quota enforcement
+
+  ```go
+  tenants := connpool.NewPoolRegistry(
+      func(tenantID string) connpool.ConnectionFactory[*sql.DB] {
+          return &DbFactory{tenantID: tenantID}
+      },
+      connpool.PoolConfig{MaxSize: connpool.Ptr(10)})
+  ```
+
+* **Priority bulkheading** — interactive traffic gets a large pool, batch gets a small one
+* **Regional backends** — one pool per datacenter (`us-east-1`, `eu-west-1`) for failover
+
+**Common anti-patterns:**
+
+| Anti-pattern | Why it's wrong | Fix |
+| --- | --- | --- |
+| **One global pool for all backends** | Cross-backend contention: slow DB queries block HTTP API calls | Use `PoolRegistry` keyed by backend type/host |
+| **Pool in a serverless function** | Pool setup (MinSize warm connections) > function cold-start time | Use `http.Client` with `Transport` (has built-in pooling) or `sql.DB` (also pools) |
+| **Undersized `MaxSize`** | 16 goroutines but `MaxSize=4` → 12 goroutines always wait | Set `MaxSize` ≥ peak concurrency |
+| **No `AcquireTimeout`** | Infinite wait (default 30s is finite, but `nil` = forever) masks backend outages | Set finite timeout (5-30s) and fail fast |
+| **Pooling stateful connections without `Reset()`** | Transaction/session state bleeds between requests | Implement `factory.Reset()` (rollback, clear session vars) |
+| **Pooling `sql.DB`** | `sql.DB` already has internal connection pooling | Use `sql.DB` directly, don't wrap it in poolyglot |
+
+## PoolRegistry patterns
+
+### Pattern 1: Per-host TCP keep-alive
+
+```go
+package main
+
+import (
+ "context"
+ "net"
+ "time"
+ "github.com/Jeffeek/poolyglot/go"
+)
+
+type TcpFactory struct {
+ host string
+ port string
+}
+
+func (f *TcpFactory) Create(ctx context.Context) (net.Conn, error) {
+ conn, err := net.DialTimeout("tcp", f.host+":"+f.port, 5*time.Second)
+ return conn, err  // fail in Create(), not in caller's request
+}
+
+func (f *TcpFactory) Validate(ctx context.Context, conn net.Conn) bool {
+ return conn != nil  // could do a quick read/write test
+}
+
+func (f *TcpFactory) Close(ctx context.Context, conn net.Conn) error {
+ return conn.Close()
+}
+
+func (f *TcpFactory) IsFatalError(err error) bool {
+ _, ok := err.(net.Error)
+ return ok
+}
+
+func main() {
+ hosts := connpool.NewPoolRegistry(
+    func(key string) connpool.ConnectionFactory[net.Conn] {
+        // key format: "host:port"
+        return &TcpFactory{host: "api.github.com", port: "443"}
+    },
+  connpool.PoolConfig{
+    MaxSize:           connpool.Ptr(8),
+    MaxLifetime:       connpool.Ptr(300.0),
+    ValidateAfterIdle: connpool.Ptr(5.0),
+  })
+  defer hosts.Close()
+
+  conn, release, err := hosts.Connection(context.Background(), "api.github.com:443")
+  if err != nil {
+    panic(err)
+  }
+  defer release(conn, false, nil)
+  // ... write request, read response ...
+}
+```
+
+### Pattern 2: Multi-tenant isolation
+
+```go
+// Different pool size per tier
+func factoryForTenant(tenantID string) connpool.ConnectionFactory[*sql.DB] {
+    tier := getTenantTier(tenantID)  // "free" | "pro" | "enterprise"
+var config connpool.PoolConfig
+ switch tier {
+ case "free":
+  config = connpool.PoolConfig{MaxSize: connpool.Ptr(2), MaxWaiters: connpool.Ptr(5)}
+ case "pro":
+  config = connpool.PoolConfig{MaxSize: connpool.Ptr(10), MaxWaiters: connpool.Ptr(20)}
+ case "enterprise":
+  config = connpool.PoolConfig{MaxSize: connpool.Ptr(50), MaxWaiters: connpool.Ptr(100)}
+ }
+ pool := connpool.NewConnectionPool(&DbFactory{tenantID: tenantID}, config)
+ pool.SetName("tenant-" + tenantID)
+ return pool
+}
+
+tenants := connpool.NewPoolRegistry(factoryForTenant)
+defer tenants.Close()
+
+conn, release, err := tenants.Connection(ctx, request.TenantID)
+if err != nil {
+ // handle error
+}
+defer release(conn, false, nil)
+// ... execute queries ...
+```
+
+### Pattern 3: Regional failover
+
+```go
+primary := connpool.NewPoolRegistry(
+ func(region string) connpool.ConnectionFactory[*sql.DB] {
+  return &DbFactory{region: region}
+ },
+ connpool.PoolConfig{
+  MaxSize: connpool.Ptr(20),
+  Breaker: &connpool.BreakerConfig{FailureThreshold: 5},
+ })
+defer primary.Close()
+
+conn, release, err := primary.Connection(ctx, "us-east-1")
+if err != nil {
+ // Circuit breaker open or pool exhausted
+ conn, release, err = primary.Connection(ctx, "us-west-2")  // fallback region
+ if err != nil {
+  // handle error
+ }
+}
+defer release(conn, false, nil)
+// ... execute queries ...
+```
+
+Use `OnBreakerStateChange` listener to alert when primary region's breaker opens.
+
 ## License
 
 MIT — see [LICENSE](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE).
