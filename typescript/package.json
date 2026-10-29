@@ -1,6 +1,6 @@
 {
   "name": "@jeffeek/connpool",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "A battle-tested async connection-pool model — slot-reserved sizing, health & rotation, a circuit breaker, backoff retries, and first-class observability. Zero runtime dependencies.",
   "keywords": [
     "connection-pool",
