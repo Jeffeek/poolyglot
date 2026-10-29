@@ -16,7 +16,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"sync"
@@ -24,8 +23,12 @@ import (
 	"time"
 
 	connpool "github.com/Jeffeek/poolyglot/go"
-	_ "modernc.org/sqlite"
 )
+
+// fakeConn represents a simple connection for demonstration purposes
+type fakeConn struct {
+	id int
+}
 
 // PrometheusMetrics is a PoolListener that tracks metrics compatible with Prometheus/StatsD.
 //
@@ -33,7 +36,7 @@ import (
 // In production, push these to your metrics backend (Prometheus pushgateway, StatsD, etc.)
 // from a background goroutine to avoid blocking the pool.
 type PrometheusMetrics struct {
-	connpool.BasePoolListener[*sql.DB]
+	connpool.BasePoolListener[*fakeConn]
 	poolName string
 
 	// Counters (monotonic) - use atomic operations
@@ -62,14 +65,14 @@ func NewPrometheusMetrics(poolName string) *PrometheusMetrics {
 }
 
 // OnConnectionCreated increments the connections_created_total counter.
-func (m *PrometheusMetrics) OnConnectionCreated(conn *connpool.PooledConnection[*sql.DB], duration float64) {
+func (m *PrometheusMetrics) OnConnectionCreated(conn *connpool.PooledConnection[*fakeConn], duration float64) {
 	count := atomic.AddInt64(&m.connectionsCreatedTotal, 1)
 	// Example: connpool_connections_created_total{pool="default"} 42
 	log.Printf("connpool_connections_created_total{pool=\"%s\"} %d", m.poolName, count)
 }
 
 // OnConnectionClosed increments the connections_closed_total counter and tracks by reason.
-func (m *PrometheusMetrics) OnConnectionClosed(conn *connpool.PooledConnection[*sql.DB], reason connpool.CloseReason) {
+func (m *PrometheusMetrics) OnConnectionClosed(conn *connpool.PooledConnection[*fakeConn], reason connpool.CloseReason) {
 	atomic.AddInt64(&m.connectionsClosedTotal, 1)
 	reasonLabel := reason.Value() // "expired", "max_uses", "error", "evicted", "shutdown"
 
@@ -90,12 +93,12 @@ func (m *PrometheusMetrics) OnCreateFailed(err error) {
 }
 
 // OnAcquired increments the acquires_total counter.
-func (m *PrometheusMetrics) OnAcquired(conn *connpool.PooledConnection[*sql.DB], waitTime float64) {
+func (m *PrometheusMetrics) OnAcquired(conn *connpool.PooledConnection[*fakeConn], waitTime float64) {
 	atomic.AddInt64(&m.acquiresTotal, 1)
 }
 
 // OnReleased increments the releases_total counter.
-func (m *PrometheusMetrics) OnReleased(conn *connpool.PooledConnection[*sql.DB], holdTime float64) {
+func (m *PrometheusMetrics) OnReleased(conn *connpool.PooledConnection[*fakeConn], holdTime float64) {
 	atomic.AddInt64(&m.releasesTotal, 1)
 }
 
@@ -106,7 +109,7 @@ func (m *PrometheusMetrics) OnAcquireTimeout(waited float64) {
 }
 
 // OnConnectionLeak increments the leaks_detected_total counter.
-func (m *PrometheusMetrics) OnConnectionLeak(conn *connpool.PooledConnection[*sql.DB], heldFor float64) {
+func (m *PrometheusMetrics) OnConnectionLeak(conn *connpool.PooledConnection[*fakeConn], heldFor float64) {
 	count := atomic.AddInt64(&m.leaksDetectedTotal, 1)
 	log.Printf("connpool_leaks_detected_total{pool=\"%s\"} %d (connection held for %.1fs)", m.poolName, count, heldFor)
 }
@@ -164,60 +167,51 @@ func breakerStateValue(state connpool.BreakerState) int {
 	}
 }
 
-// sqlConnFactory is a ConnectionFactory that creates *sql.DB connections.
-type sqlConnFactory struct {
-	db *sql.DB
+// fakeConnFactory is a ConnectionFactory that creates fakeConn connections.
+type fakeConnFactory struct {
+	nextID int
+	mu     sync.Mutex
 }
 
-func (f *sqlConnFactory) Create() (*sql.DB, error) {
-	// For demo purposes, return the shared DB handle
-	// In production, you might pool sql.Conn instead
-	if err := f.db.Ping(); err != nil {
-		return nil, err
-	}
-	return f.db, nil
+func (f *fakeConnFactory) Create() (*fakeConn, error) {
+	f.mu.Lock()
+	id := f.nextID
+	f.nextID++
+	f.mu.Unlock()
+
+	// Simulate connection creation time
+	time.Sleep(10 * time.Millisecond)
+	return &fakeConn{id: id}, nil
 }
 
-func (f *sqlConnFactory) Validate(conn *sql.DB) bool {
-	return conn.Ping() == nil
+func (f *fakeConnFactory) Validate(conn *fakeConn) bool {
+	return conn != nil
 }
 
-func (f *sqlConnFactory) Close(conn *sql.DB) error {
-	// Don't close the shared DB handle
+func (f *fakeConnFactory) Close(conn *fakeConn) error {
+	// Nothing to do for fake connections
 	return nil
 }
 
-func (f *sqlConnFactory) Reset(conn *sql.DB) error { return nil }
+func (f *fakeConnFactory) Reset(conn *fakeConn) error { return nil }
 
-func (f *sqlConnFactory) IsFatalError(err error) bool { return true }
+func (f *fakeConnFactory) IsFatalError(err error) bool { return false }
 
 func main() {
-	// Set up SQLite database
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		log.Fatalf("failed to open database: %v", err)
-	}
-	defer db.Close()
-
-	// Create demo table
-	if _, err := db.Exec("CREATE TABLE demo (id INTEGER PRIMARY KEY, value TEXT)"); err != nil {
-		log.Fatalf("failed to create table: %v", err)
-	}
-
 	// Set up pool with metrics listener
 	metrics := NewPrometheusMetrics("demo_pool")
-	factory := &sqlConnFactory{db: db}
+	factory := &fakeConnFactory{}
 	config := connpool.DefaultConfig()
 	config.MinSize = 2
 	config.MaxSize = 4
 	config.MaintenanceInterval = connpool.Ptr(2.0)
 
-	pool, err := connpool.NewConnectionPool[*sql.DB](
+	pool, err := connpool.NewConnectionPool[*fakeConn](
 		factory,
 		config,
-		&connpool.Options[*sql.DB]{
+		&connpool.Options[*fakeConn]{
 			Name:      "demo_pool",
-			Listeners: []connpool.PoolListener[*sql.DB]{metrics},
+			Listeners: []connpool.PoolListener[*fakeConn]{metrics},
 		},
 	)
 	if err != nil {
@@ -237,12 +231,9 @@ func main() {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			err := pool.Use(connpool.Of(5.0), func(conn *sql.DB) error {
-				_, err := conn.Exec("INSERT INTO demo (value) VALUES (?)", fmt.Sprintf("row-%d", n))
-				if err != nil {
-					return err
-				}
-				time.Sleep(100 * time.Millisecond)
+			err := pool.Use(connpool.Of(5.0), func(conn *fakeConn) error {
+				// Simulate work
+				time.Sleep(50 * time.Millisecond)
 				return nil
 			})
 			if err != nil {

@@ -29,7 +29,6 @@ import (
 	"time"
 
 	connpool "github.com/Jeffeek/poolyglot/go"
-	_ "modernc.org/sqlite"
 )
 
 // RegionalDatabase simulates a regional database (uses SQLite, simulates failures).

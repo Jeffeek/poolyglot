@@ -29,7 +29,6 @@ import (
 	"time"
 
 	connpool "github.com/Jeffeek/poolyglot/go"
-	_ "modernc.org/sqlite"
 )
 
 // TenantTier defines a subscription tier configuration.
