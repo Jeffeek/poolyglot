@@ -1,6 +1,6 @@
 module github.com/Jeffeek/poolyglot/go/examples
 
-go 1.26.0
+go 1.21.0
 
 // v0.0.0 + the replace below means the examples always build against the local parent
 // sources, never a published version — so this never needs a release-time version bump.
