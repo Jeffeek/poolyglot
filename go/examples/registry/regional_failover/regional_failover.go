@@ -22,7 +22,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"math/rand/v2"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sync"
