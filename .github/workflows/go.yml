@@ -44,6 +44,12 @@ jobs:
         run: go vet ./...
       - name: Tests + coverage gate (100% statements)
         run: bash run_tests.sh
+      - name: Build + run examples
+        run: |
+          cd examples
+          go build ./...
+          go run ./monitoring/prometheus_metrics.go
+          go run ./observability/lifecycle_logger.go
 
       # run_tests.sh writes coverage.out; flag=go keeps it separate from the other languages.
       - name: Upload coverage to Codecov

@@ -191,6 +191,134 @@ findings worth reviewing but not gated.
 * Acquire-wait / create-latency percentiles are estimated over the last 1024 samples (bounded memory), not the full history.
 * With `validateIdle` on, idle connections being pinged by the background sweep are briefly reserved and count as `inUse` (not `idle`) in `stats()` for the duration of that check.
 
+## When to use (and when not to)
+
+**Use a connection pool when:**
+* Creating connections is expensive (≥10ms network handshake, TLS negotiation, auth)
+* You make many requests over a connection's lifetime (reuse justifies overhead)
+* Backends impose connection limits (DB `max_connections`, API rate limits)
+* You need connection health checks or automatic retries
+
+**Don't pool when:**
+* Connection creation is cheap (<1ms). Example: in-memory H2, local Unix domain sockets
+* Connections are single-use. Example: SMTP without keep-alive, one-shot process pipes
+* You have ≤1 concurrent request (no contention, just `create-and-close`)
+* Short-lived Lambda/Cloud Run functions — pool setup cost > function lifetime; use the runtime's persistent connection cache or managed pooler instead
+
+**Use `PoolRegistry` (multiple pools) when:**
+
+* **Per-host HTTP client** — `PoolRegistry` keyed by hostname avoids head-of-line blocking (one slow host won't starve requests to fast hosts)
+
+  ```java
+  var hosts = new PoolRegistry<String, Socket>(
+      host -> new SocketFactory(host),
+      PoolConfig.builder().maxSize(8).build());
+  try (var lease = hosts.connection("api.example.com")) { ... }
+  ```
+
+* **Multi-tenant isolation** — separate `maxSize` per tenant for quota enforcement
+
+  ```java
+  var tenants = new PoolRegistry<String, Connection>(
+      tenantId -> new JdbcFactory(tenantId),
+      PoolConfig.builder().maxSize(10).build());
+  ```
+
+* **Priority bulkheading** — interactive traffic gets a large pool, batch gets a small one
+* **Regional backends** — one pool per datacenter (`us-east-1`, `eu-west-1`) for failover
+
+**Common anti-patterns:**
+
+| Anti-pattern | Why it's wrong | Fix |
+| --- | --- | --- |
+| **One global pool for all backends** | Cross-backend contention: slow DB queries block HTTP API calls | Use `PoolRegistry` keyed by backend type/host |
+| **Pool in a serverless function** | Pool setup (minSize warm connections) > function cold-start time | Use HikariCP (has fast startup) or managed pooler (RDS Proxy, Cloud SQL) |
+| **Undersized `maxSize`** | 16 threads but `maxSize=4` → 12 threads always wait | Set `maxSize` ≥ peak concurrency |
+| **No `acquireTimeout`** | Infinite wait (default 30s is finite, but `null` = forever) masks backend outages | Set finite timeout (5-30s) and fail fast |
+| **Pooling stateful connections without `reset()`** | Transaction/session state bleeds between requests | Implement `factory.reset()` (rollback, clear session vars) |
+| **Pooling HikariCP or c3p0 connections** | Double-pooling (they already pool) | Use HikariCP directly, don't wrap its DataSource in poolyglot |
+
+## PoolRegistry patterns
+
+### Pattern 1: Per-host socket keep-alive
+
+```java
+import io.github.jeffeek.connpool.*;
+import java.net.Socket;
+
+public class SocketFactory implements ConnectionFactory<Socket> {
+    private final String host;
+    private final int port;
+
+    public SocketFactory(String host, int port) { this.host = host; this.port = port; }
+
+    @Override
+    public Socket create() throws Exception {
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(host, port), 5000);  // fail in create(), not in caller
+        return socket;
+    }
+
+    @Override
+    public boolean validate(Socket conn) { return conn.isConnected() && !socket.isClosed(); }
+
+    @Override
+    public boolean isFatalError(Throwable exc) { return exc instanceof IOException; }
+}
+
+var hosts = new PoolRegistry<String, Socket>(
+    key -> {
+        String[] parts = key.split(":");
+        return new SocketFactory(parts[0], Integer.parseInt(parts[1]));
+    },
+    PoolConfig.builder().maxSize(8).maxLifetime(300.0).validateAfterIdle(5.0).build());
+
+try (var lease = hosts.connection("api.github.com:443")) {
+    var socket = lease.value();
+    // ... write request, read response ...
+}
+```
+
+### Pattern 2: Multi-tenant isolation
+
+```java
+// Different pool size per tier
+ConnectionFactory<Connection> factoryForTenant(String tenantId) {
+    var tier = getTenantTier(tenantId);  // "free" | "pro" | "enterprise"
+    var config = switch (tier) {
+        case "free" -> PoolConfig.builder().maxSize(2).maxWaiters(5).build();
+        case "pro" -> PoolConfig.builder().maxSize(10).maxWaiters(20).build();
+        case "enterprise" -> PoolConfig.builder().maxSize(50).maxWaiters(100).build();
+    };
+    return new ConnectionPool<>(new JdbcFactory(tenantId), config, "tenant-" + tenantId);
+}
+
+var tenants = new PoolRegistry<String, Connection>(this::factoryForTenant);
+try (var lease = tenants.connection(request.tenantId())) {
+    var conn = lease.value();
+    // ... execute queries ...
+}
+```
+
+### Pattern 3: Regional failover
+
+```java
+var primary = new PoolRegistry<String, Connection>(
+    region -> new JdbcFactory(region),
+    PoolConfig.builder().maxSize(20).breaker(BreakerConfig.builder().failureThreshold(5).build()).build());
+
+try (var lease = primary.connection("us-east-1")) {
+    lease.value().execute("SELECT ...");
+} catch (PoolError e) {
+    // Circuit breaker open or pool exhausted
+    try (var lease = primary.connection("us-west-2")) {  // fallback region
+        lease.value().execute("SELECT ...");
+    }
+}
+```
+
+Use `onBreakerStateChange` listener to alert when primary region's breaker opens.
+
 ## License
 
 MIT — see [LICENSE](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE).

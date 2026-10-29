@@ -178,6 +178,133 @@ these as a separate `lint` job.
 * Acquire-wait / create-latency percentiles are estimated over the last 1024 samples (bounded memory), not the full history.
 * With `ValidateIdle` on, idle connections being pinged by the background sweep are briefly reserved and count as `InUse` (not `Idle`) in `Stats()` for the duration of that check.
 
+## When to use (and when not to)
+
+**Use a connection pool when:**
+
+- Creating connections is expensive (≥10ms network handshake, TLS negotiation, auth)
+- You make many requests over a connection's lifetime (reuse justifies overhead)
+- Backends impose connection limits (DB `max_connections`, API rate limits)
+- You need connection health checks or automatic retries
+
+**Don't pool when:**
+
+* Connection creation is cheap (<1ms). Example: in-process message queues, named pipes
+* Connections are single-use. Example: `SmtpClient` without keep-alive, one-shot processes
+* You have ≤1 concurrent request (no contention, just `create-and-close`)
+* Short-lived Azure Functions / AWS Lambda — pool setup cost > function lifetime; use the runtime's persistent connection cache or managed connection pooler instead
+
+**Use `PoolRegistry` (multiple pools) when:**
+
+* **Per-host HTTP client** — `PoolRegistry` keyed by hostname avoids head-of-line blocking (one slow host won't starve requests to fast hosts)
+
+  ```csharp
+  var hosts = new PoolRegistry<string, TcpClient>(
+      host => new TcpFactory(host),
+      new PoolConfig { MaxSize = 8 });
+  using var lease = hosts.Connection("api.example.com");
+
+* **Multi-tenant isolation** — separate `MaxSize` per tenant for quota enforcement
+
+ ```csharp
+  var tenants = new PoolRegistry<string, DbConnection>(
+      tenantId => new DbFactory(tenantId),
+      new PoolConfig { MaxSize = 10 });
+  ```
+  
+* **Priority bulkheading** — interactive traffic gets a large pool, batch gets a small one
+* **Regional backends** — one pool per datacenter (`us-east-1`, `eu-west-1`) for failover
+
+**Common anti-patterns:**
+
+| Anti-pattern | Why it's wrong | Fix |
+| --- | --- | --- |
+| **One global pool for all backends** | Cross-backend contention: slow DB queries block HTTP API calls | Use `PoolRegistry` keyed by backend type/host |
+| **Pool in a serverless function** | Pool setup (MinSize warm connections) > function cold-start time | Use `HttpClient` singleton (has built-in pooling) or managed pooler (Azure SQL elastic pool) |
+| **Undersized `MaxSize`** | 16 threads but `MaxSize=4` → 12 threads always wait | Set `MaxSize` ≥ peak concurrency |
+| **No `AcquireTimeout`** | Infinite wait (default 30s is finite, but `null` = forever) masks backend outages | Set finite timeout (5-30s) and fail fast |
+| **Pooling stateful connections without `Reset()`** | Transaction/session state bleeds between requests | Implement `factory.Reset()` (rollback, clear session vars) |
+| **Pooling `HttpClient`** | `HttpClient` already has internal connection pooling | Use singleton `HttpClient` or `IHttpClientFactory`, don't wrap it in poolyglot |
+
+## PoolRegistry patterns
+
+### Pattern 1: Per-host TCP keep-alive
+
+```csharp
+using ConnPool;
+using System.Net.Sockets;
+
+public class TcpFactory : ConnectionFactory<TcpClient>
+{
+    private readonly string _host;
+    private readonly int _port;
+
+    public TcpFactory(string host, int port) { _host = host; _port = port; }
+
+    public override TcpClient Create()
+    {
+        var client = new TcpClient();
+        client.Connect(_host, _port);  // fail in Create(), not in caller's request
+        return client;
+    }
+
+    public override bool Validate(TcpClient conn) => conn.Connected;
+}
+
+var hosts = new PoolRegistry<string, TcpClient>(
+    key => {
+        var parts = key.Split(':');
+        return new TcpFactory(parts[0], int.Parse(parts[1]));
+    },
+    new PoolConfig { MaxSize = 8, MaxLifetime = 300 });
+
+using var lease = hosts.Connection("api.github.com:443");
+var stream = lease.Value.GetStream();
+// ... write request, read response ...
+```
+
+See `examples/TcpKeepAlivePerHost.cs` for a runnable version.
+
+### Pattern 2: Multi-tenant isolation
+
+```csharp
+// Different pool size per tier
+ConnectionFactory<DbConnection> FactoryForTenant(string tenantId)
+{
+    var tier = GetTenantTier(tenantId);  // "free" | "pro" | "enterprise"
+    return new DbFactory(tenantId);
+}
+
+var tenants = new PoolRegistry<string, DbConnection>(
+    FactoryForTenant,
+    new PoolConfig { MaxSize = 10, MaxWaiters = 20 });
+
+using var db = tenants.Connection(request.TenantId);
+// ... execute queries ...
+```
+
+### Pattern 3: Regional failover
+
+```csharp
+var primary = new PoolRegistry<string, DbConnection>(
+    region => new DbFactory(region),
+    new PoolConfig { MaxSize = 20, Breaker = new BreakerConfig { FailureThreshold = 5 } });
+
+try
+{
+    using var db = primary.Connection("us-east-1");
+    db.Value.Execute("SELECT ...");
+}
+catch (PoolError)
+{
+    // Circuit breaker open or pool exhausted
+    using var db = primary.Connection("us-west-2");  // fallback region
+    db.Value.Execute("SELECT ...");
+}
+```
+
+Use `OnBreakerStateChange` listener to alert when primary region's breaker opens.
+
 ## License
 
 MIT — see [LICENSE](https://github.com/Jeffeek/poolyglot/blob/main/LICENSE).
