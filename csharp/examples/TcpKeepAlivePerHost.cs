@@ -1,5 +1,15 @@
 // Keep-alive TCP sockets, one pool per host (illustration; needs network to actually connect).
 //
+// Why per-host pooling?
+// - Avoids head-of-line blocking: one slow host won't starve requests to fast hosts
+// - Each host gets its own connection limit (MaxSize per pool)
+// - PoolRegistry creates pools lazily on first use
+//
+// Pattern: PoolRegistry keyed by "host:port"
+// - Key = "host:port" (e.g., "api.github.com:443", "example.com:80")
+// - Value = pool of TCP connections to that host:port
+// - Config is shared across all hosts (MaxSize=8 per host)
+//
 // A PoolRegistry gives you one lazily-created pool per key - here per "host:port" - which is the
 // natural shape for per-host connection reuse (HTTP keep-alive, SMTP, a custom RPC, ...).
 using System.Net.Sockets;
@@ -36,6 +46,7 @@ public static class TcpKeepAlivePerHost
 {
     public static void Run()
     {
+        // Create registry: one pool per host:port, shared config
         using var hosts = new PoolRegistry<string, TcpClient>(
             key =>
             {
@@ -44,9 +55,18 @@ public static class TcpKeepAlivePerHost
             },
             new PoolConfig { MaxSize = 8, MaxLifetime = 300, ValidateAfterIdle = 5 });
 
+        // First request to example.com:80 creates a pool lazily
         using var lease = hosts.Connection("example.com:80");
         NetworkStream stream = lease.Value.GetStream();
         // ... write a request, read a response ...
         _ = stream;
+
+        // Pool stats (per-host)
+        var pool = hosts.Pool("example.com:80");
+        var stats = pool.Stats();
+        Console.WriteLine($"\nPool stats for example.com:80:");
+        Console.WriteLine($"  Size: {stats.Size}/{stats.MaxSize}");
+        Console.WriteLine($"  Created: {stats.Created}, Closed: {stats.Closed}");
+        Console.WriteLine($"  Acquire wait p95: {stats.P95AcquireWait:F3}s");
     }
 }

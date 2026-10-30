@@ -192,7 +192,7 @@ cargo install cargo-llvm-cov
   the direct analog of Go's `T comparable`.
 * No RAII guard type yet — borrowing is explicit `acquire()` / `release()`, mirroring Go's
   `Acquire`/`Release` pair (not C#'s `using lease = pool.Connection()`).
-- Async cancellation is future-drop, not a token: dropping the `acquire()`/`use_()` future while
+* Async cancellation is future-drop, not a token: dropping the `acquire()`/`use_()` future while
   it's pending frees the reserved slot via a `Drop` guard, the Rust analog of Python's implicit
   task-cancellation handling and C#'s `CancellationToken`.
 * A tiny built-in SplitMix64 RNG (`Rng`/`SystemRng`) drives jitter so the blocking pool stays
@@ -217,6 +217,166 @@ cargo install cargo-llvm-cov
 * Acquire-wait / create-latency percentiles are estimated over the last 1024 samples (bounded memory), not the full history.
 * With `validate_idle` on, idle connections being pinged by the background sweep are briefly reserved and count as in-use (not idle) in `stats()` for the duration of that check.
 * Coverage gate is **100% lines** (the LCOV metric Codecov reports), enforced by `run_tests.sh`. LLVM *region/branch* coverage is intentionally not gated: `async fn` state-machine codegen leaves a few region artifacts that aren't real untested paths.
+
+## When to use (and when not to)
+
+**Use a connection pool when:**
+* Creating connections is expensive (≥10ms network handshake, TLS negotiation, auth)
+* You make many requests over a connection's lifetime (reuse justifies overhead)
+* Backends impose connection limits (DB `max_connections`, API rate limits)
+* You need connection health checks or automatic retries
+
+**Don't pool when:**
+* Connection creation is cheap (<1ms). Example: in-memory SQLite, local Unix domain sockets
+* Connections are single-use. Example: SMTP without keep-alive, one-shot `std::process::Command` pipes
+* You have ≤1 concurrent task/thread (no contention, just `create-and-close`)
+* Short-lived Lambda/Cloud Run functions — pool setup cost > function lifetime; use the runtime's persistent connection cache instead
+
+**Use `PoolRegistry` (multiple pools) when:**
+
+* **Per-host HTTP keep-alive** — `PoolRegistry` keyed by hostname avoids head-of-line blocking (one slow host won't starve requests to fast hosts)
+
+  ```rust
+  let hosts = PoolRegistry::new(
+      |host: &str| TcpFactory::new(host),
+      PoolConfig { max_size: Some(8), ..Default::default() });
+  let conn = hosts.connection("api.example.com")?;
+  // use conn, release on drop
+  ```
+
+* **Multi-tenant isolation** — separate `max_size` per tenant for quota enforcement
+
+  ```rust
+  let tenants = PoolRegistry::new(
+      |tenant_id: &str| DbFactory::new(tenant_id),
+      PoolConfig { max_size: Some(10), ..Default::default() });
+  ```
+
+* **Priority bulkheading** — interactive traffic gets a large pool, batch gets a small one
+* **Regional backends** — one pool per datacenter (`us-east-1`, `eu-west-1`) for failover
+
+**Common anti-patterns:**
+
+| Anti-pattern | Why it's wrong | Fix |
+| --- | --- | --- |
+| **One global pool for all backends** | Cross-backend contention: slow DB queries block HTTP API calls | Use `PoolRegistry` keyed by backend type/host |
+| **Pool in a serverless function** | Pool setup (min_size warm connections) > function cold-start time | Use `deadpool` / `r2d2` (optimized for fast startup) or managed pooler |
+| **Undersized `max_size`** | High concurrency but `max_size=Some(4)` → many tasks always wait | Set `max_size` ≥ peak concurrency |
+| **No `acquire_timeout`** | Infinite wait (default 30s is finite, but `None` = forever) masks backend outages | Set finite timeout (5-30s) and fail fast |
+| **Pooling stateful connections without `reset()`** | Transaction/session state bleeds between requests | Implement `factory.reset()` (rollback, clear session vars) |
+| **Pooling `deadpool` or `r2d2` pools** | Double-pooling (they already pool) | Use them directly, don't wrap in poolyglot |
+
+## PoolRegistry patterns
+
+### Pattern 1: Per-host TCP keep-alive
+
+```rust
+use connpool::{ConnectionFactory, PoolConfig, PoolRegistry};
+use std::net::TcpStream;
+use std::time::Duration;
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct TcpConn(std::sync::Arc<std::sync::Mutex<TcpStream>>);
+
+struct TcpFactory {
+    host: String,
+    port: u16,
+}
+
+impl TcpFactory {
+    fn new(host: &str, port: u16) -> Self {
+        Self { host: host.to_string(), port }
+    }
+}
+
+impl ConnectionFactory<TcpConn> for TcpFactory {
+    fn create(&self) -> Result<TcpConn, Box<dyn std::error::Error>> {
+        let stream = TcpStream::connect_timeout(
+            &format!("{}:{}", self.host, self.port).parse()?,
+            Duration::from_secs(5)
+        )?;
+        Ok(TcpConn(std::sync::Arc::new(std::sync::Mutex::new(stream))))
+    }
+
+    fn validate(&self, conn: &TcpConn) -> bool {
+        conn.0.lock().unwrap().peer_addr().is_ok()  // still connected?
+    }
+
+    fn is_fatal_error(&self, err: &dyn std::error::Error) -> bool {
+        err.to_string().contains("Connection refused")
+    }
+}
+
+fn main() {
+    let hosts = PoolRegistry::new(
+        |key: &str| {
+            let parts: Vec<&str> = key.split(':').collect();
+            TcpFactory::new(parts[0], parts[1].parse().unwrap())
+        },
+        PoolConfig {
+            max_size: Some(8),
+            max_lifetime: Some(300.0),
+            validate_after_idle: Some(5.0),
+            ..Default::default()
+        }
+    );
+
+    let conn = hosts.connection("api.github.com:443").unwrap();
+    // ... write request, read response ...
+    hosts.release(conn, false, None);
+}
+```
+
+### Pattern 2: Multi-tenant isolation
+
+```rust
+// Different pool size per tier
+fn factory_for_tenant(tenant_id: &str) -> ConnectionPool<DbConnection> {
+    let tier = get_tenant_tier(tenant_id);  // "free" | "pro" | "enterprise"
+    let config = match tier.as_str() {
+        "free" => PoolConfig { max_size: Some(2), max_waiters: Some(5), ..Default::default() },
+        "pro" => PoolConfig { max_size: Some(10), max_waiters: Some(20), ..Default::default() },
+        "enterprise" => PoolConfig { max_size: Some(50), max_waiters: Some(100), ..Default::default() },
+        _ => panic!("unknown tier"),
+    };
+    ConnectionPool::new(DbFactory::new(tenant_id), config, Some(&format!("tenant-{}", tenant_id)))
+}
+
+let tenants = PoolRegistry::new(factory_for_tenant);
+
+let conn = tenants.connection(&request.tenant_id)?;
+// ... execute queries ...
+tenants.release(conn, false, None);
+```
+
+### Pattern 3: Regional failover
+
+```rust
+let primary = PoolRegistry::new(
+    |region: &str| DbFactory::new(region),
+    PoolConfig {
+        max_size: Some(20),
+        breaker: Some(BreakerConfig {
+            failure_threshold: 5,
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+);
+
+let conn = match primary.connection("us-east-1") {
+    Ok(c) => c,
+    Err(_) => {
+        // Circuit breaker open or pool exhausted
+        primary.connection("us-west-2")?  // fallback region
+    }
+};
+
+// ... execute queries ...
+primary.release(conn, false, None);
+```
+
+Use `on_breaker_state_change` listener to alert when primary region's breaker opens.
 
 ## Considered, not implemented
 

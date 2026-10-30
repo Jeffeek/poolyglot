@@ -72,6 +72,37 @@ Every implementation targets the same contract:
 > Field names, event names, and defaults are **identical** across languages — switching is a syntax
 > change, not a mental-model change.
 
+## When to use (and when not to)
+
+**Use a connection pool when:**
+
+- Creating connections is expensive (≥10ms network handshake, TLS negotiation, auth)
+- You make many requests over a connection's lifetime (reuse justifies overhead)
+- Backends impose connection limits (DB `max_connections`, API rate limits)
+- You need connection health checks or automatic retries
+
+**Don't pool when:**
+
+- Connection creation is cheap (<1ms, e.g., in-memory queues, local pipes)
+- Connections are single-use (can't be reused, no keep-alive)
+- You have ≤1 concurrent request (no contention, just create-and-close)
+- Serverless / short-lived functions (pool setup cost > benefit)
+
+**Use multiple pools (`PoolRegistry`) when:**
+
+- **Per-host HTTP keep-alive** — avoid head-of-line blocking across hosts
+- **Multi-tenant isolation** — quota enforcement, separate limits per tenant
+- **Priority bulkheading** — interactive vs batch with different `max_size`
+- **Regional backends** — one pool per datacenter/availability zone
+
+**Common anti-patterns:**
+
+- **One global pool for all backends** → cross-backend contention; use `PoolRegistry` keyed by host
+- **Pool in a serverless handler** → connection setup overhead > function lifetime; prefer persistent connections from the runtime or SDK
+- **Undersized `max_size` for concurrency** → if 16 threads but `max_size=4`, 12 threads always wait; set `max_size` ≥ peak concurrency
+- **No `acquire_timeout`** → infinite wait masks availability issues; set finite timeout and fail fast
+- **Pooling stateful connections without `reset()`** → session bleed between requests; implement `factory.reset()`
+
 ## Architecture
 
 The library is layered with a strict **downward-only** dependency direction — each layer may only

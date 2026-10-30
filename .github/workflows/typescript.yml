@@ -47,6 +47,12 @@ jobs:
         run: npm run typecheck
       - name: Tests + coverage gate (100% line + branch)
         run: bash run_tests.sh
+      - name: Build + check examples
+        run: |
+          npx tsx --no-warnings examples/monitoring/prometheus_metrics.ts
+          npx tsx --no-warnings examples/registry/multi_tenant.ts
+          npx tsx --no-warnings examples/registry/regional_failover.ts
+          npx tsx --no-warnings examples/observability/lifecycle_logger.ts
 
       # run_tests.sh writes coverage/lcov.info; flag=typescript keeps it separate from the others.
       - name: Upload coverage to Codecov

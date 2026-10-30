@@ -48,6 +48,12 @@ jobs:
           coverage report
       - name: Type check
         run: mypy
+      - name: Run examples
+        run: |
+          python examples/monitoring/prometheus_metrics.py
+          python examples/registry/multi_tenant.py
+          python examples/registry/regional_failover.py
+          python examples/observability/lifecycle_logger.py
 
       # Upload coverage once (all versions are identical at 100%); flag=python keeps it
       # separate from the C# flag on Codecov.
